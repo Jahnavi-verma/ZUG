@@ -118,7 +118,7 @@ While a **Web App** is used for the **Manager's "Command Center"** (to review hi
 ### **4. Tech Stack & Development Plan**
 
 #### **The Architecture**
-![Architecture]()
+![Architecture](https://github.com/Jahnavi-verma/ZUG/blob/main/505a516b-efe3-47f6-946c-16fc6bf7b012.png)
 #### **The "Anti-Fraud" Tech Stack**
 
 * **Frontend (Mobile):** **Flutter or React Native** (for cross-platform deployment) with native modules for high-speed sensor data polling.
