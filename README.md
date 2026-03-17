@@ -11,19 +11,25 @@ The application must provide a digital insurance/protection layer that automatic
 
 ### **2. Persona-Based Scenarios**
 
-#### **Persona A: Arjun (The "Hardworking Hustler")**
+#### **Persona A: Kirto (The "Customer not available")**
+#* Our MVP*
+* **Role:** A delivery partner for a e-commerce brand (e.g., Amazon)
+* **The Problem:** Kirto reaches the destination, the customer does not accept the parcel or the customer is not availabe. This results in Kirto carrying the parcel back to warehouse. For this return journey Kirto may only be paid once (many associated companies do not pay even once). But if multiple trips are made back and fourth, Kirto does not get any compensation, her status is reduced and she losses her wages and incentives.
+* **The Application Scenario:** The app detects multiple failed deliveries to the same destination, it then calcultes total compensations and losses and files for insurance. Hence bridging the gap bettween her wages.
+
+#### **Persona B: Arjun (The "Hardworking Hustler")**
 
 * **Role:** Last-mile delivery partner for a high-volume e-commerce brand (e.g., DHL or Amazon).
 * **The Problem:** Arjun reaches the warehouse at 8:00 AM, but the sorting system is down. He sits idle for 3 hours. Because he is paid "per successful delivery," he has earned ₹0 for the morning and will now miss his "Daily 20-Delivery Bonus."
 * **The Application Scenario:** The app detects his GPS location at the warehouse and cross-references the logistics partner's "System Down" status. It automatically logs a "Warehouse Delay" event and calculates his average hourly earning rate to provide a bridge payment, saving his daily income.
 
-#### **Persona B: Sarah (The "SLA Victim")**
+#### **Persona C: Sarah (The "SLA Victim")**
 
 * **Role:** Premium delivery partner with "Gold Tier" status.
 * **The Problem:** Sarah has 5 packages left. A sudden app outage prevents her from closing her deliveries before the 8:00 PM SLA deadline. The system marks her as "Late," dropping her to "Silver Tier" for the next week, which reduces her per-package pay by 15%.
 * **The Application Scenario:** The app records the "App Outage" period. When the connection restores, it "Shields" Sarah’s Tier status by compensating the amount that she has lost in her wages. This enables Sarah to have stable life.
 
-#### **Persona C: "The Ghost" (The Fraudster)**
+#### **Persona D: "The Ghost" (The Fraudster)**
 
 * **Role:** A user trying to exploit the income protection.
 * **The Problem:** This user leaves their phone at a known "high traffic" zone to claim "Traffic Congestion Delay" payments while they are actually at home.
