@@ -12,7 +12,9 @@ The application must provide a digital insurance/protection layer that automatic
 ### **2. Persona-Based Scenarios**
 
 #### **Persona A: Kirto (The "Customer not available")**
-#* Our MVP*
+
+# * Our MVP*
+
 * **Role:** A delivery partner for a e-commerce brand (e.g., Amazon)
 * **The Problem:** Kirto reaches the destination, the customer does not accept the parcel or the customer is not availabe. This results in Kirto carrying the parcel back to warehouse. For this return journey Kirto may only be paid once (many associated companies do not pay even once). But if multiple trips are made back and fourth, Kirto does not get any compensation, her status is reduced and she losses her wages and incentives.
 * **The Application Scenario:** The app detects multiple failed deliveries to the same destination, it then calcultes total compensations and losses and files for insurance. Hence bridging the gap bettween her wages.
