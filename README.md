@@ -5,6 +5,9 @@
 
 ## Zero-risk Universal Gig-cover
 ZUG is a micro-income protection platform for delivery workers, addressing income loss from failed deliveries such as RTO trips, cancellations, and customer unavailability. It uses a parametric, event-driven model where each failed attempt becomes a micro-claim, enabling fast and transparent payouts. With real-time verification and a mobile-first design, ZUG integrates seamlessly into delivery workflows while ensuring fairness and reducing fraud.
+<p align='center'>
+<img width="792" height="506" alt="_- visual selection (2)" src="https://github.com/user-attachments/assets/a015e309-e384-485d-b5dc-28aff1766692" />
+</p>
 
 ---
 
@@ -192,6 +195,6 @@ Login → Fetch zone data → Calculate risk → Show premium → Track RTO → 
 3. **Phase 3 (The Payout Engine):** Integrate with Logistics APIs to automate the **Parametric Triggers** and start the Weekly Premium pilot.
 4. **Phase 4 (Manager Hub):** Launch the **Web Command Center** for audit trails and investigation management.
    
-Summary
+### **Summary**
 
 We model Return-To-Origin (RTO) as a measurable financial risk for gig workers, where each RTO results in an estimated ₹30 loss due to fuel and opportunity cost. Using simulated platform API data, we compute zone-level average RTO rates and dynamically assess worker risk. Insurance coverage is triggered only when a worker’s RTO count exceeds the expected baseline, ensuring fairness and preventing misuse. Workers receive ₹10–₹15 per excess RTO, while paying a capped weekly premium of ₹40–₹50, collaboratively funded by the worker, platform, and customers. This enables affordable, real-time, and automated protection against operational inefficiencies.
