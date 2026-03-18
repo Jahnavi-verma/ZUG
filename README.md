@@ -19,10 +19,12 @@ The application must provide a digital insurance/protection layer that automatic
 
 ### **2. Persona-Based Scenarios**
 
-##### RTO is our MVP use case for a broader income protection system. Future triggers:
+##### RTO is our MVP use case for a broader income protection system. Additional triggers:
 - rain disruption
 - low demand zones
 - traffic delays
+- warehouse disruption 
+- app outage
 
 We provide parametric insurance for gig workers against excess Return-To-Origin (RTO) trips by modeling zone-level RTO risk using platform data. Workers experiencing abnormal RTO frequency are automatically compensated.
 
@@ -74,6 +76,7 @@ Before any payout is authorized, the system runs the following checks:
 1. **Liveness Verification:** Prompts for a quick biometric scan to ensure the correct partner is present.
 2. **Sensor Fusion:** Analyzes if the GPS movement matches the physical vibrations of a moving vehicle (prevents GPS spoofing).
 3. **Deduplication:** Checks if the partner is currently active on a competing app to prevent "Double Dipping" on income loss claims.
+4. **Account Sharing:** Every gig worker can register through his/her unique e-Shram ID. To prevent account sharing, only one device is allowed per account at a time.
 
 #### **Step 4: Payout & Documentation (The Resolution)**
 
@@ -83,7 +86,7 @@ Before any payout is authorized, the system runs the following checks:
 
 #### **Step 5: Audit (The Command Center)**
 
-* The Manager reviews the "Evidence Management" folder, which contains the photos, location logs, and sensor data from the incident to ensure the system is making accurate decisions.
+* The Manager reviews the "Evidence Management" folder for claims that are _flagged_, which contains the photos, location logs, and sensor data from the incident to ensure the system is making accurate decisions.
 
 ---
 
@@ -97,7 +100,7 @@ Step 4: Apply margin → weekly premium
 
 * **The "Micro-Premium" Approach:** Instead of large upfront costs, the model uses a weekly "Subscription for Protection" deducted automatically from the partner’s earnings.
 Dynamic Premium Logic
-Total Risk = RTO Risk + Weather Risk
+Total Risk Score= RTO Risk + Weather Risk + Traffic Risk ------> Premium Band
 * **Dynamic Risk Rating:** The premium is not fixed; it adjusts weekly based on the partner’s "Safe Driver" score and "Fraud Integrity" rating. High integrity (never triggering "Anti-Spoof" shields) results in lower weekly premiums.
 RTO Risk Score = f(
   zone_rto_rate,
@@ -105,8 +108,6 @@ RTO Risk Score = f(
   time_of_day,
   historical failures
 )
-RTO Risk + Weather Risk + Traffic Risk -> Risk SCore->Premium Band
-
 * **Collaborative Funding:** The cost is split three ways: a small percentage from the **Partner** (security), a contribution from the **Logistics Company** (SLA insurance), and a platform fee from the **E-commerce Brand** (retention).
  Collaborative Funding Model
 Stakeholder
