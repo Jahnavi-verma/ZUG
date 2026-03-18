@@ -1,4 +1,8 @@
 ﻿# ZUG
+
+![](https://github.com/Jahnavi-verma/ZUG/blob/main/505a516b-efe3-47f6-946c-16fc6bf7b012.png)
+
+
 ## Zero-risk Universal Gig-cover
 
 ---
