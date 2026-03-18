@@ -1,7 +1,7 @@
 ﻿# ZUG
  
 <img src="https://github.com/Jahnavi-verma/ZUG/blob/main/ZUG%20(1).png" width="100" height="100">
-https://github.com/Jahnavi-verma/ZUG/blob/main/ZUG%20(1).png
+
 
 ## Zero-risk Universal Gig-cover
 
