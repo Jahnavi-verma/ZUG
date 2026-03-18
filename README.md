@@ -23,7 +23,7 @@ We provide parametric insurance for gig workers against excess Return-To-Origin 
 #### **Persona A: Kirto (The "Customer not available")**
 
 * **Role:** A delivery partner for a e-commerce brand (e.g., Amazon)
-* **The Problem:** Kirto reaches the destination, the customer does not accept the parcel or the customer is not available. This results in Kirto carrying the parcel back to warehouse. For this return journey Kirto may only be paid once (many associated companies do not pay even once). But if multiple trips are made back and fourth, Kirto does not get any compensation, her status is reduced and she losses her wages and incentives.
+* **The Problem:** Kirto reaches the destination, the customer does not accept the parcel or the customer is not available. This results in Kirto carrying the parcel back to warehouse. For this return journey, Kirto may only be paid once (many associated companies do not pay even once). But if multiple trips are made back and fourth, Kirto does not get any compensation, her tier status is reduced and she losses her wages and incentives.
 
 * **The Application Scenario:** The app detects multiple failed deliveries to the same destination, it then calculates total compensations and losses and files for insurance. Hence bridging the gap between her wages.
 
@@ -99,7 +99,8 @@ RTO Risk Score = f(
   time_of_day,
   historical failures
 )
-rto risk+weather+traffic risk->risk score->Premium band
+RTO Risk + Weather Risk + Traffic Risk -> Risk SCore->Premium Band
+
 * **Collaborative Funding:** The cost is split three ways: a small percentage from the **Partner** (security), a contribution from the **Logistics Company** (SLA insurance), and a platform fee from the **E-commerce Brand** (retention).
  Collaborative Funding Model
 Stakeholder
@@ -115,10 +116,10 @@ Contribution
 • Customer contributes micro-amount (~₹0.10/order) without friction
 Flow
 1. Compute Zone RTO Rate based on:
-• historical RTO rate per zone
-• time of day
-• payment mode (COD vs prepaid)
-• customer reliability
+  * historical RTO rate per zone
+  * time of day
+  * payment mode (COD vs prepaid)
+  * customer reliability
 2. Predict excess RTO probability
 3. Fetch weather forecast (rain probability)
 4. Estimate Expected Loss:
@@ -166,7 +167,6 @@ Login → Fetch zone data → Calculate risk → Show premium → Track RTO → 
 #### **Fraud Detection (The "Shields")**
 
 * **Anomaly Detection:** ML identifies "Non-Human" movement patterns. If GPS coordinates jump in a way that defies physics or if sensor vibrations don't match a vehicle's engine RPM, the **Anti-Spoof Shield** flags it.
-* **Computer Vision:** For the **Anti-Ghost Shield**, on-device ML (TensorFlow Lite) performs "Liveness Detection" to ensure a static photo or video isn't being held up to the camera during a verification check.
 * **RTO mocking:** Uses platform API data (not self-reported) and compares with zone average to detect anomalies. If a sudden spike or repeated same area failures are observed, user is flagged.
 
 ---
@@ -188,5 +188,7 @@ Login → Fetch zone data → Calculate risk → Show premium → Track RTO → 
 2. **Phase 2 (The Shields):** Deploy the **Anti-Ghost** and **Anti-Spoof** ML models to the mobile app to secure the data stream.
 3. **Phase 3 (The Payout Engine):** Integrate with Logistics APIs to automate the **Parametric Triggers** and start the Weekly Premium pilot.
 4. **Phase 4 (Manager Hub):** Launch the **Web Command Center** for audit trails and investigation management.
+   
 Summary
+
 We model Return-To-Origin (RTO) as a measurable financial risk for gig workers, where each RTO results in an estimated ₹30 loss due to fuel and opportunity cost. Using simulated platform API data, we compute zone-level average RTO rates and dynamically assess worker risk. Insurance coverage is triggered only when a worker’s RTO count exceeds the expected baseline, ensuring fairness and preventing misuse. Workers receive ₹10–₹15 per excess RTO, while paying a capped weekly premium of ₹40–₹50, collaboratively funded by the worker, platform, and customers. This enables affordable, real-time, and automated protection against operational inefficiencies.
