@@ -1,7 +1,5 @@
 ﻿# ZUG
-
-![](https://github.com/Jahnavi-verma/ZUG/blob/main/505a516b-efe3-47f6-946c-16fc6bf7b012.png)
-
+<img src="https://github.com/Jahnavi-verma/ZUG/blob/main/WhatsApp%20Image%202026-03-18%20at%2012.42.59%20PM.jpeg" width="100" height="100">
 
 ## Zero-risk Universal Gig-cover
 
