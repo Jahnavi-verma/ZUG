@@ -94,8 +94,11 @@ Before any payout is authorized, the system runs the following checks:
 
 #### **The Weekly Premium Model**
 Step 1: Calculate zone RTO risk
+
 Step 2: Estimate expected excess RTO
+
 Step 3: Convert to expected loss
+
 Step 4: Apply margin → weekly premium
 
 * **The "Micro-Premium" Approach:** Instead of large upfront costs, the model uses a weekly "Subscription for Protection" deducted automatically from the partner’s earnings.
@@ -109,18 +112,13 @@ RTO Risk Score = f(
   historical failures
 )
 * **Collaborative Funding:** The cost is split three ways: a small percentage from the **Partner** (security), a contribution from the **Logistics Company** (SLA insurance), and a platform fee from the **E-commerce Brand** (retention).
+  
  Collaborative Funding Model
-Stakeholder
-Contribution
- Worker
-50%
- Platform
-30%
- E-commerce Brand
-20%
-• Worker pays a small, affordable amount
-• Platform benefits from worker retention & reliability
-• Customer contributes micro-amount (~₹0.10/order) without friction
+Stakeholder Contribution
+  * Worker 50% : Worker pays a small, affordable amount
+  * Platform 30% : Platform benefits from worker retention & reliability
+  * E-commerce Brand 20% : Customer contributes micro-amount (~₹0.10/order) without friction
+ 
 Flow
 1. Compute Zone RTO Rate based on:
   * historical RTO rate per zone
@@ -195,7 +193,8 @@ Login → Fetch zone data → Calculate risk → Show premium → Track RTO → 
 2. **Phase 2 (The Shields):** Deploy the **Anti-Ghost** and **Anti-Spoof** ML models to the mobile app to secure the data stream.
 3. **Phase 3 (The Payout Engine):** Integrate with Logistics APIs to automate the **Parametric Triggers** and start the Weekly Premium pilot.
 4. **Phase 4 (Manager Hub):** Launch the **Web Command Center** for audit trails and investigation management.
-   
+
+---
 ### **Summary**
 
 We model Return-To-Origin (RTO) as a measurable financial risk for gig workers, where each RTO results in an estimated ₹30 loss due to fuel and opportunity cost. Using simulated platform API data, we compute zone-level average RTO rates and dynamically assess worker risk. Insurance coverage is triggered only when a worker’s RTO count exceeds the expected baseline, ensuring fairness and preventing misuse. Workers receive ₹10–₹15 per excess RTO, while paying a capped weekly premium of ₹40–₹50, collaboratively funded by the worker, platform, and customers. This enables affordable, real-time, and automated protection against operational inefficiencies.
