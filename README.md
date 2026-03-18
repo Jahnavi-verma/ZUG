@@ -4,6 +4,7 @@
 
 
 ## Zero-risk Universal Gig-cover
+ZUG is a micro-income protection platform for delivery workers, addressing income loss from failed deliveries such as RTO trips, cancellations, and customer unavailability. It uses a parametric, event-driven model where each failed attempt becomes a micro-claim, enabling fast and transparent payouts. With real-time verification and a mobile-first design, ZUG integrates seamlessly into delivery workflows while ensuring fairness and reducing fraud.
 
 ---
 
