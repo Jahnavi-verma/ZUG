@@ -51,7 +51,7 @@ We provide parametric insurance for gig workers against excess Return-To-Origin 
 
 * **Role:** A user trying to exploit the income protection.
 * **The Problem:** This user leaves their phone at a known "high traffic" zone to claim "Traffic Congestion Delay" payments while they are actually at home.
-* **The Application Scenario:** The **Anti-Spoof Shield** triggers. It detects that the phone's **Accelerometer and Gyroscope** are perfectly still (no engine vibration or walking motion), while the **Liveness Check** fails because no face is present. The claim is automatically denied and flagged for the "Manager Web App."
+* **The Application Scenario:** The **Anti-Spoof Shield** triggers. It detects that the phone's **Accelerometer and Magnetometer** are perfectly still (no engine vibration or walking motion), while the **Liveness Check** fails because no fingerprint is present. The claim is automatically denied and flagged for the "Manager Web App."
 
 ---
 
@@ -93,11 +93,11 @@ Before any payout is authorized, the system runs the following checks:
 ### **1. Weekly Premium & Parametric Model**
 
 #### **The Weekly Premium Model**
-Step 1: Calculate zone RTO risk
+Step 1: Calculate zone loss risk
 
-Step 2: Estimate expected excess RTO
+Step 2: Estimate expected excess loss
 
-Step 3: Convert to expected loss
+Step 3: Convert to expected total loss
 
 Step 4: Apply margin → weekly premium
 
