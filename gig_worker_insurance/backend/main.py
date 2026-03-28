@@ -1,22 +1,45 @@
+# pyre-ignore-all-errors
 from fastapi import FastAPI
+from backend.services.weather_service import weather_service
+from backend.services.traffic_service import traffic_service
+from backend.services.rto_service import rto_service
+
+from backend.utils.risk_engine import calculate_final_result
 
 app = FastAPI()
 
+
+@app.get("/")
+def root():
+    return {"message": "ZUG backend running 🚀"}
+
+
 @app.post("/predict-risk")
-def predict_risk(data: dict):
+def predict_risk():
+    print("API HIT")
+    weather = weather_service()
+    print("Weather done ")
+    traffic = traffic_service()
+    print("Traffic done")
+    rto = rto_service()
+    print("RTO done")
 
-    rain = data.get("rain", 0)
-    traffic = data.get("traffic", 0)
-    rto = data.get("zone_rto_rate", 0)
+    result = calculate_final_result(weather, traffic, rto)
 
-    # simple logic (acts like ML for now)
-    risk_score = (0.4 * rain) + (0.3 * traffic) + (0.3 * rto)
-
-    premium = int(20 + (risk_score * 30))
+    risk_score = result["risk_score"]
+    premium = int(20 + result["risk_score"] * 30)
     coverage = premium * 20
 
     return {
-        "risk_score": round(risk_score, 2),
+        "risk_score": result["risk_score"],
         "premium": premium,
-        "coverage": coverage
+        "coverage": coverage,
+        "trigger": result["trigger"],
+        "fraud": rto["fraud"],
+        "payout": rto["payout"],
+        "details": {
+            "weather": weather,
+            "traffic": traffic,
+            "rto": rto
+        }
     }
