@@ -1,8 +1,13 @@
 # pyre-ignore-all-errors
 import requests
+import os
+from dotenv import load_dotenv
 
-API_KEY = "ef9d549f61b80416bc718692e00e94ec"
-CITY = "Bangalore"
+load_dotenv()
+
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
+CITY = os.getenv("CITY")
+
 
 RAIN_THRESHOLD = 70
 HEAT_THRESHOLD = 50
