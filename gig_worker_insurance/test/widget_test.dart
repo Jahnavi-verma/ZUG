@@ -5,26 +5,37 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gig_worker_insurance/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  setUpAll(() {
+    HttpOverrides.global = null;
+  });
+
+  testWidgets('App launches and shows Onboarding screen test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const GigWorkerApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Verify that the title of the first onboarding page is shown.
+    expect(find.text('Gig Worker Insurance'), findsOneWidget);
+    expect(find.text('Protect your income from unexpected disruptions.'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Verify that the Skip and Next buttons are shown.
+    expect(find.text('Skip'), findsOneWidget);
+    expect(find.text('Next'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Tap the 'Next' button and trigger a frame to animate to next page.
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle(); // pumpAndSettle waits for animations to finish
+
+    // Verify that we are on the next page.
+    expect(find.text('Parametric Payouts'), findsOneWidget);
   });
 }
