@@ -1,7 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'login_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _storage = const FlutterSecureStorage();
+  
+  final _nameController = TextEditingController(text: 'Rahul');
+  final _upiController = TextEditingController(text: 'rahul@upi');
+  
+  bool _isEditingName = false;
+  bool _isEditingUpi = false;
+  
+  String _phoneNumber = '+91 98765 43210';
+  String _eshramId = '1234 5678 9012';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredData();
+  }
+
+  Future<void> _loadStoredData() async {
+    final phone = await _storage.read(key: 'phone_number');
+    final eshram = await _storage.read(key: 'plain_eshram_id');
+    
+    if (mounted) {
+      setState(() {
+        if (phone != null) _phoneNumber = phone;
+        if (eshram != null) _eshramId = eshram;
+      });
+    }
+  }
+
+  Future<void> _logout() async {
+    await _storage.delete(key: 'last_sms_date');
+    await _storage.delete(key: 'worker_id');
+    await _storage.delete(key: 'phone_number');
+    await _storage.delete(key: 'plain_eshram_id');
+
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,20 +73,19 @@ class ProfileScreen extends StatelessWidget {
             title: 'Details',
             isDark: isDark,
             children: [
-              _buildSettingTile(
-                context,
+              _buildEditableTile(
                 icon: Icons.person_outline,
-                title: 'Name',
-                subtitle: 'Rahul',
-                isDark: isDark,
+                label: 'Name',
+                controller: _nameController,
+                isEditing: _isEditingName,
                 themeColor: themeColor,
-                onTap: () {},
+                onToggle: () => setState(() => _isEditingName = !_isEditingName),
               ),
               _buildSettingTile(
                 context,
                 icon: Icons.phone_android_outlined,
                 title: 'Phone No.',
-                subtitle: '+91 98765 43210',
+                subtitle: _phoneNumber,
                 isDark: isDark,
                 themeColor: themeColor,
                 onTap: () {},
@@ -45,7 +94,7 @@ class ProfileScreen extends StatelessWidget {
                 context,
                 icon: Icons.badge_outlined,
                 title: 'e-Shram ID',
-                subtitle: '1234 5678 9012',
+                subtitle: _eshramId,
                 isDark: isDark,
                 themeColor: themeColor,
                 onTap: () {},
@@ -57,14 +106,13 @@ class ProfileScreen extends StatelessWidget {
             title: 'Payment Methods',
             isDark: isDark,
             children: [
-              _buildSettingTile(
-                context,
+              _buildEditableTile(
                 icon: Icons.account_balance_wallet_outlined,
-                title: 'UPI',
-                subtitle: 'rahul@upi',
-                isDark: isDark,
+                label: 'UPI',
+                controller: _upiController,
+                isEditing: _isEditingUpi,
                 themeColor: themeColor,
-                onTap: () {},
+                onToggle: () => setState(() => _isEditingUpi = !_isEditingUpi),
               ),
               _buildSettingTile(
                 context,
@@ -105,12 +153,12 @@ class ProfileScreen extends StatelessWidget {
               _buildSettingTile(
                 context,
                 icon: Icons.logout,
-                title: 'Sign Out',
+                title: 'Log Out',
                 subtitle: 'Sign out from this device',
                 isDark: isDark,
                 themeColor: Colors.red,
                 textColor: Colors.red,
-                onTap: () {},
+                onTap: _logout,
               ),
               _buildSettingTile(
                 context,
@@ -145,9 +193,9 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'e-Shram ID: 1234 5678 9012',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                Text(
+                  'e-Shram ID: $_eshramId',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -191,6 +239,41 @@ class ProfileScreen extends StatelessWidget {
         ),
         ...children,
       ],
+    );
+  }
+
+  Widget _buildEditableTile({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    required bool isEditing,
+    required Color themeColor,
+    required VoidCallback onToggle,
+  }) {
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: themeColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: themeColor),
+      ),
+      title: isEditing
+          ? TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              onSubmitted: (_) => onToggle(),
+            )
+          : Text(controller.text, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(label, style: const TextStyle(fontSize: 12)),
+      trailing: IconButton(
+        icon: Icon(isEditing ? Icons.check : Icons.edit, size: 20, color: Colors.grey),
+        onPressed: onToggle,
+      ),
     );
   }
 

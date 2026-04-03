@@ -1,16 +1,50 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class TicketsScreen extends StatelessWidget {
+class TicketsScreen extends StatefulWidget {
   const TicketsScreen({super.key});
+
+  @override
+  State<TicketsScreen> createState() => _TicketsScreenState();
+}
+
+class _TicketsScreenState extends State<TicketsScreen> {
+  final _supabase = Supabase.instance.client;
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _fraudLogs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFraudLogs();
+  }
+
+  Future<void> _fetchFraudLogs() async {
+    try {
+      final data = await _supabase
+          .from('fraud_logs')
+          .select()
+          .order('detected_at', ascending: false);
+      
+      setState(() {
+        _fraudLogs = List<Map<String, dynamic>>.from(data);
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching fraud logs: $e');
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     const themeColor = Colors.indigo;
-    // Mocking fraud claims. You can add maps to this list to see the cards.
-    final List<Map<String, String>> fraudClaims = [
-      {'id': '#FR-1024', 'reason': 'Duplicate Medical Invoice', 'date': '25 Oct 2023'},
-      {'id': '#FR-2150', 'reason': 'Altered Location Data', 'date': '26 Oct 2023'},
-    ];
+
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xfff5f7fa),
@@ -19,8 +53,17 @@ class TicketsScreen extends StatelessWidget {
         backgroundColor: themeColor,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() => _isLoading = true);
+              _fetchFraudLogs();
+            },
+          )
+        ],
       ),
-      body: fraudClaims.isEmpty
+      body: _fraudLogs.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -41,9 +84,9 @@ class TicketsScreen extends StatelessWidget {
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: fraudClaims.length,
+              itemCount: _fraudLogs.length,
               itemBuilder: (context, index) {
-                final claim = fraudClaims[index];
+                final log = _fraudLogs[index];
                 return Card(
                   elevation: 2,
                   margin: const EdgeInsets.only(bottom: 16),
@@ -57,32 +100,43 @@ class TicketsScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              claim['id'] ?? '',
+                              'Log #${log['id']}',
                               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14),
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.1),
+                                color: Colors.red.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Text(
-                                'FLAGGED',
-                                style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+                              child: Text(
+                                (log['status'] ?? 'PENDING').toUpperCase(),
+                                style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          claim['reason'] ?? '',
+                          log['alert_type'] ?? 'Unknown Anomaly',
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Detected on: ${claim['date']}',
+                          'Detected on: ${log['detected_at']}',
                           style: const TextStyle(color: Colors.grey, fontSize: 13),
                         ),
+                        if (log['fraud_score'] != null) ...[
+                          const SizedBox(height: 12),
+                          LinearProgressIndicator(
+                            value: log['fraud_score'],
+                            backgroundColor: Colors.grey.shade200,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(height: 4),
+                          Text('Risk Score: ${(log['fraud_score'] * 100).toStringAsFixed(0)}%', 
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red)),
+                        ]
                       ],
                     ),
                   ),
