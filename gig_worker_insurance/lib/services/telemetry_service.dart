@@ -103,7 +103,6 @@ class TelemetryService {
     return _buffer.map((e) => e.toJson()).toList();
   }
 
-  /// Triggers a claim. If [simulatedTime] is provided, it uses that for partitioning compatibility.
   Future<void> triggerClaim(String triggerType, {bool? forceFraud, DateTime? simulatedTime}) async {
     try {
       final workerIdStr = await _storage.read(key: 'worker_id');
@@ -111,11 +110,7 @@ class TelemetryService {
       final int workerId = int.parse(workerIdStr);
 
       bool fraudulent = forceFraud ?? !isTravelingOnBike();
-
-      // Ensure triggerType fits VARCHAR(20)
       String safeTrigger = triggerType.length > 20 ? triggerType.substring(0, 20) : triggerType;
-      
-      // Use current time or simulated time
       final DateTime triggerTime = simulatedTime ?? DateTime.now();
 
       final claimRes = await _supabase.from('claims').insert({
@@ -128,7 +123,6 @@ class TelemetryService {
 
       final int claimId = claimRes['id'];
       
-      // Simulation: upload evidence immediately if time is forced, otherwise use window
       if (simulatedTime != null) {
         await uploadEvidence(claimId, triggerTime, fraudulent);
       } else {
@@ -156,15 +150,10 @@ class TelemetryService {
         'uploaded_at': triggerTime.toIso8601String(),
       });
 
-      if (isFraudulent) {
-        await _supabase.from('fraud_logs').insert({
-          'worker_id': int.parse(workerIdStr),
-          'claim_id': claimId,
-          'alert_type': 'Stationary Alert', // Shortened
-          'fraud_score': 0.9,
-          'status': 'pending',
-        });
-      }
+      // No manual insert to fraud_logs here anymore. 
+      // The backend or DB triggers should handle creating the fraud log 
+      // when is_fraudulent is true in the claims table.
+      print("Evidence Sync Complete for claim #$claimId");
     } catch (e) {
       print("Evidence Sync Error: $e");
     }

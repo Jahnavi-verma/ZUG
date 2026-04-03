@@ -3,32 +3,44 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  // Use localhost for Web, and 10.0.2.2 for Android Emulator
-  static const baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000";
+  // Use your Mac's network IP: 10.210.29.152
+  static const _macIp = "10.210.29.152";
+
+  static const baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://$_macIp:8000";
 
   static Future<Map<String, dynamic>> predictRisk() async {
     try {
       final response = await http.post(
         Uri.parse("$baseUrl/predict-risk"),
         headers: {"Content-Type": "application/json"},
-      ).timeout(const Duration(seconds: 5)); // Add 5 second timeout
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        
+        // Ensure premium never exceeds 50
+        if (data['premium'] != null && data['premium'] > 50) {
+          data['premium'] = 50;
+        }
+        
+        return data;
       } else {
-        throw Exception("Failed to load risk prediction");
+        throw Exception("Server error: ${response.statusCode}");
       }
     } catch (e) {
       debugPrint("ApiService Error: $e");
-      // Return a default mock value on failure so the dashboard can load
+      // Safety Fallback with max premium cap of 50
       return {
-        "risk_score": 0.1,
-        "premium": 150,
-        "coverage": 3000,
+        "risk_score": 0.05,
+        "premium": 50,
+        "coverage": 1000,
         "trigger": null,
+        "fraud": false,
+        "payout": 0,
         "details": {
           "weather": {"current": {"temp": 25, "rain": 0}},
-          "traffic": {"current": 0.3}
+          "traffic": {"current": 0.3},
+          "rto": {"today": 0, "mode": 0}
         }
       };
     }

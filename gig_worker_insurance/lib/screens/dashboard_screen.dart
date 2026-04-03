@@ -34,6 +34,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _backendTrigger;
   Map<String, dynamic> _weather = {};
   double _traffic = 0.0;
+  bool _fraudAlert = false;
+  int _potentialPayout = 0;
+  int _rtoToday = 0;
+  int _rtoMode = 0;
 
   @override
   void initState() {
@@ -45,25 +49,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isLoading = true);
     await Future.wait([
       _fetchRealDashboardData(),
-      _fetchRiskFromBackend(),
+      _fetchBackendAnalysis(),
     ]);
     setState(() => _isLoading = false);
   }
 
-  Future<void> _fetchRiskFromBackend() async {
+  Future<void> _fetchBackendAnalysis() async {
     try {
       final data = await ApiService.predictRisk();
       if (mounted) {
         setState(() {
-          // Capturing premium calculated by Python
-          _calculatedPremium = (data['premium'] as num).toInt();
+          // Robust parsing with null-safety
+          _calculatedPremium = (data['premium'] ?? 150) as int;
           _backendTrigger = data['trigger'];
-          _weather = data['details']['weather']['current'] ?? {};
-          _traffic = (data['details']['traffic']['current'] as num).toDouble();
+          
+          final details = data['details'] ?? {};
+          _weather = details['weather']?['current'] ?? {};
+          
+          final trafficData = details['traffic'] ?? {};
+          _traffic = (trafficData['current'] ?? 0.0).toDouble();
+          
+          _fraudAlert = data['fraud'] ?? false;
+          _potentialPayout = (data['payout'] ?? 0).toInt();
+          
+          final rtoData = details['rto'] ?? {};
+          _rtoToday = (rtoData['today'] ?? 0).toInt();
+          _rtoMode = (rtoData['mode'] ?? 0).toInt();
         });
       }
     } catch (e) {
-      debugPrint('Backend calculation error: $e');
+      debugPrint('Backend Analysis Error: $e');
     }
   }
 
@@ -120,6 +135,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   _buildLiveStatusCard(),
                   const SizedBox(height: 12),
+                  if (_fraudAlert) _buildFraudWarningCard(),
+                  if (_fraudAlert) const SizedBox(height: 12),
                   _buildPremiumCard(),
                   const SizedBox(height: 12),
                   _buildSimulationRow(),
@@ -161,7 +178,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, color: hasAlert ? Colors.orange.shade900 : Colors.green.shade900),
         ),
         subtitle: Text('Temp: ${_weather['temp'] ?? '--'}°C | Rain: ${_weather['rain'] ?? '0'}mm | Traffic: ${(_traffic * 10).toStringAsFixed(1)}/10'),
-        trailing: hasAlert ? const Text('INSURED', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.orange)) : null,
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('PAYOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text('₹$_potentialPayout', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.indigo, fontSize: 18)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFraudWarningCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.gpp_maybe_rounded, color: Colors.red),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'High Fraud Probability Detected in your RTO patterns. Claims may be flagged for manual review.',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -247,9 +293,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Icon(Icons.stars_rounded, color: Colors.indigo, size: 32),
             const SizedBox(width: 16),
-            const Expanded(
-              child: Text('Next week premium price:', 
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Next week premium price:', 
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo)),
+                  Text('RTO Benchmarking: $_rtoToday (vs avg $_rtoMode)', 
+                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
             ),
             Text('₹$_calculatedPremium', 
               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.indigo)),
@@ -318,6 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+// Main Navigation & Persistance (Refactored for correctness)
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
   @override
