@@ -1,3 +1,22 @@
+<<<<<<< HEAD
+# gig_worker_insurance
+
+A new Flutter project.
+
+## Getting Started
+
+This project is a starting point for a Flutter application.
+
+A few resources to get you started if this is your first Flutter project:
+
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
+=======
 ﻿# ZUG
  
 <img src="https://github.com/Jahnavi-verma/ZUG/blob/main/ZUG%20(1).png" width="100" height="100">
@@ -198,3 +217,4 @@ Login → Fetch zone data → Calculate risk → Show premium → Track RTO → 
 ### **Summary**
 
 We model Return-To-Origin (RTO) as a measurable financial risk for gig workers, where each RTO results in an estimated ₹30 loss due to fuel and opportunity cost. Using simulated platform API data, we compute zone-level average RTO rates and dynamically assess worker risk. Insurance coverage is triggered only when a worker’s RTO count exceeds the expected baseline, ensuring fairness and preventing misuse. Workers receive ₹10–₹15 per excess RTO, while paying a capped weekly premium of ₹40–₹50, collaboratively funded by the worker, platform, and customers. This enables affordable, real-time, and automated protection against operational inefficiencies.
+>>>>>>> d33cd9a2bc49071fd5a723fc46f2607df0b05ac9
