@@ -1,0 +1,11 @@
+zone_id,zone_name,region,pin_codes,total_orders,rto_count,rto_rate_pct,rto_reason_customer_unavailable,rto_reason_address_not_found,rto_reason_refused_by_customer,rto_reason_payment_issue,rto_reason_damaged_in_transit,daily_mon_orders,daily_mon_rto,daily_tue_orders,daily_tue_rto,daily_wed_orders,daily_wed_rto,daily_thu_orders,daily_thu_rto,daily_fri_orders,daily_fri_rto,daily_sat_orders,daily_sat_rto,daily_sun_orders,daily_sun_rto,week,week_label
+z01,Marathahalli,East,"560037,560103",3840,614,15.99,221,148,89,96,60,520,82,610,94,580,91,540,88,620,99,490,79,480,81,2025-W13,Mar 24 - Mar 30 2025
+z02,Indiranagar,East,"560038,560008",4210,505,12.00,175,120,85,75,50,580,68,640,76,620,72,590,70,670,81,560,67,550,71,2025-W13,Mar 24 - Mar 30 2025
+z03,Jayanagar,South,"560041,560069,560070",3560,427,11.99,160,102,70,58,37,480,57,530,63,510,60,500,59,560,67,490,59,490,62,2025-W13,Mar 24 - Mar 30 2025
+z04,Electronic City,South-East,"560100,560105",5120,870,16.99,320,210,115,140,85,710,118,780,131,740,126,720,122,800,138,680,115,690,120,2025-W13,Mar 24 - Mar 30 2025
+z05,Koramangala,South-East,"560034,560095",4780,573,11.99,195,140,98,88,52,650,77,720,86,700,83,670,80,750,90,640,77,650,80,2025-W13,Mar 24 - Mar 30 2025
+z06,Whitefield,East,"560066,560067",4450,712,16.00,265,180,95,108,64,620,98,670,106,640,102,620,99,700,113,600,95,600,99,2025-W13,Mar 24 - Mar 30 2025
+z07,Hebbal,North,"560024,560032",2980,417,13.99,155,100,72,58,32,405,56,450,63,430,60,415,58,470,66,400,56,410,58,2025-W13,Mar 24 - Mar 30 2025
+z08,Rajajinagar,West,"560010,560055",2750,330,12.00,120,80,55,48,27,375,44,420,50,400,47,385,46,440,53,360,44,370,46,2025-W13,Mar 24 - Mar 30 2025
+z09,JP Nagar,South,"560078,560062",3200,448,14.00,170,108,65,68,37,430,60,490,68,470,65,450,63,510,71,430,60,420,61,2025-W13,Mar 24 - Mar 30 2025
+z10,Yelahanka,North,"560064,560106",2340,304,12.99,112,75,52,42,23,320,41,360,46,340,44,325,42,375,49,310,40,310,42,2025-W13,Mar 24 - Mar 30 2025

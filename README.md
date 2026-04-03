@@ -4,7 +4,7 @@
 
 
 ## Zero-risk Universal Gig-cover
-ZUG is a micro-income protection platform for delivery workers, addressing income loss from failed deliveries such as RTO trips, cancellations, and customer unavailability. It uses a parametric, event-driven model where each failed attempt becomes a micro-claim, enabling fast and transparent payouts. With real-time verification and a mobile-first design, ZUG integrates seamlessly into delivery workflows while ensuring fairness and reducing fraud.
+ZUG is a micro-income protection platform for delivery workers, addressing income loss from failed deliveries such as **RTO trips**, cancellations, and customer unavailability. It uses a parametric, event-driven model where each failed attempt becomes a micro-claim, enabling fast and transparent payouts. With real-time verification and a mobile-first design, ZUG integrates seamlessly into delivery workflows while ensuring fairness and reducing fraud.
 <p align='center'>
 <img width="792" height="506" alt="_- visual selection (2)" src="https://github.com/user-attachments/assets/a015e309-e384-485d-b5dc-28aff1766692" />
 </p>
@@ -73,7 +73,7 @@ The workflow operates in a loop of **Monitor → Detect → Shield → Resolve.*
 
 Before any payout is authorized, the system runs the following checks:
 
-1. **Liveness Verification:** Prompts for a quick biometric scan to ensure the correct partner is present.
+1. **Liveness Verification:** Prompts for a quick fingerprint scan to ensure the correct partner is present.
 2. **Sensor Fusion:** Analyzes if the GPS movement matches the physical vibrations of a moving vehicle (prevents GPS spoofing).
 3. **Deduplication:** Checks if the partner is currently active on a competing app to prevent "Double Dipping" on income loss claims.
 4. **Account Sharing:** Every gig worker can register through his/her unique e-Shram ID. To prevent account sharing, only one device is allowed per account at a time.

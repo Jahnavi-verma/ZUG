@@ -1,7 +1,12 @@
 # pyre-ignore-all-errors
+import pandas as pd
 from statistics import mode
-
-past_rto_data = [1, 2, 2, 3, 2, 1]
+def load_rto_data():
+    try:
+        df = pd.read_csv("backend/data/rto_data.csv")
+        return df["rto"].tolist()
+    except:
+        return [1, 2, 2, 3, 2, 1]  # fallback
 high_rto_streak = 0
 
 
@@ -33,8 +38,10 @@ def detect_fraud(today, mode_rto):
 
 
 def rto_service():
+    past_rto_data = load_rto_data()   #from CSV
+
     today = fetch_today_rto()
-    mode_rto = mode(past_rto_data)
+    mode_rto = mode(past_rto_data) if past_rto_data else 0
 
     return {
         "risk": calculate_rto_risk(today, mode_rto),
