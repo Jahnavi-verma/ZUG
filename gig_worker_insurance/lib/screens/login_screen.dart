@@ -1,299 +1,229 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:crypto/crypto.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:persistent_device_id/persistent_device_id.dart';
+import '../services/telemetry_service.dart';
 import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _idController = TextEditingController();
+  int _currentStep = 1; // 1: e-Shram, 2: SMS Phone, 3: OTP
+  final _storage = const FlutterSecureStorage();
+  final _auth = LocalAuthentication();
+  final _supabase = Supabase.instance.client;
+
+  final _eshramController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
-  bool _isOtpSent = false;
 
-  void _sendOtp() {
-    if (_idController.text.isNotEmpty) {
-      setState(() {
-        _isOtpSent = true;
-      });
-    }
-  }
+  bool _isLoading = false;
+  String? _hashedId;
 
-  void _login() {
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
-      );
-    }
-  }
+  Future<void> _handleEShramSubmit() async {
+    if (_eshramController.text.isEmpty) return;
 
-  void _verifyOtp() {
-    if (_otpController.text.isNotEmpty) {
-      _login();
-    }
-  }
+    setState(() => _isLoading = true);
 
-  void _biometricAuth() {
-    showModalBottomSheet<bool>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.fingerprint_rounded, size: 80, color: Colors.indigo),
-              const SizedBox(height: 24),
-              const Text(
-                'Touch the fingerprint sensor',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context, true); // Close bottom sheet and return true
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: const Text('Simulate Scan Success', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              )
-            ],
-          ),
-        );
-      },
-    ).then((success) {
-      if (success == true) {
-        _login(); // Triggers only after the bottomsheet has gracefully popped
+    final String plainId = _eshramController.text;
+    final bytes = utf8.encode(plainId);
+    _hashedId = sha256.convert(bytes).toString();
+
+    try {
+      final existingWorker = await _supabase
+          .from('workers')
+          .select()
+          .eq('eshram_hash', _hashedId!)
+          .maybeSingle();
+
+      if (existingWorker != null) {
+        // Save worker session info
+        await _storage.write(key: 'worker_id', value: existingWorker['id'].toString());
+        await _storage.write(key: 'plain_eshram_id', value: plainId);
+
+        final lastSmsStr = await _storage.read(key: 'last_sms_date');
+        if (lastSmsStr != null) {
+          final lastSmsDate = DateTime.parse(lastSmsStr);
+          if (DateTime.now().difference(lastSmsDate).inDays < 14) {
+            final didAuthenticate = await _auth.authenticate(
+              localizedReason: 'Secure login via biometrics',
+              options: const AuthenticationOptions(biometricOnly: true),
+            );
+
+            if (didAuthenticate) {
+              TelemetryService().startTracking();
+              setState(() => _isLoading = false);
+              _navigateToHome();
+              return;
+            }
+          }
+        }
       }
+    } catch (e) {
+      debugPrint('Supabase select error: $e');
+    }
+
+    setState(() {
+      _isLoading = false;
+      _currentStep = 2;
     });
+  }
+
+  Future<void> _sendOtp() async {
+    if (_phoneController.text.isEmpty) return;
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(seconds: 2));
+    setState(() {
+      _isLoading = false;
+      _currentStep = 3;
+    });
+  }
+
+  Future<void> _verifyOtp() async {
+    if (_otpController.text == '123456') {
+      setState(() => _isLoading = true);
+
+      // 1. Permission for device ID
+      bool? allowAccess = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Permission Required'),
+          content: const Text('Allow this app to access your persistent device ID for secure authentication?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Deny')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
+          ],
+        ),
+      );
+
+      if (allowAccess != true) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // 2. Biometric check (replacing camera liveness)
+      try {
+        final bool didAuthenticate = await _auth.authenticate(
+          localizedReason: 'Verify fingerprint to link your account to this device',
+          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+        );
+
+        if (!didAuthenticate) {
+          setState(() => _isLoading = false);
+          return;
+        }
+      } catch (e) {
+        debugPrint('Biometric error: $e');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      try {
+        String? deviceId;
+        try {
+          deviceId = await PersistentDeviceId.getDeviceId();
+        } catch (e) {
+          deviceId = 'unknown_hw_id';
+        }
+
+        final response = await _supabase.from('workers').upsert({
+          'eshram_hash': _hashedId,
+          'device_id': deviceId,
+          'last_biometric_at': DateTime.now().toIso8601String(),
+          'is_trusted': true,
+        }, onConflict: 'eshram_hash').select().single();
+
+        await _storage.write(key: 'worker_id', value: response['id'].toString());
+        await _storage.write(key: 'plain_eshram_id', value: _eshramController.text);
+        await _storage.write(key: 'phone_number', value: _phoneController.text);
+        await _storage.write(key: 'last_sms_date', value: DateTime.now().toIso8601String());
+
+        TelemetryService().startTracking();
+        _navigateToHome();
+      } catch (e) {
+        debugPrint('Sync failed: $e');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      } finally {
+        setState(() => _isLoading = false);
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP')));
+    }
+  }
+
+  void _navigateToHome() {
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainNavigationScreen()));
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_isOtpSent,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        if (_isOtpSent) {
-          setState(() {
-            _isOtpSent = false;
-            _otpController.clear();
-          });
-        }
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xfff5f7fa),
-        // Add a back button in the AppBar if OTP is sent, for excellent UX
-        appBar: _isOtpSent
-            ? AppBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.indigo),
-                  onPressed: () {
-                    setState(() {
-                      _isOtpSent = false;
-                      _otpController.clear();
-                    });
-                  },
-                ),
-              )
-            : null,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            child: Container(
-              height:
-                  MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).padding.top -
-                  (_isOtpSent ? 56 : 0), // Adjust for appbar height
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.indigo.shade50,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.security_rounded,
-                      size: 80,
-                      color: Colors.indigo,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  Text(
-                    'Gig Worker Insurance',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black87,
-                      letterSpacing: -0.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Secure your daily income instantly.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 48),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        if (!_isOtpSent) ...[
-                          TextField(
-                            key: const ValueKey('id_field'), // Fixes element retention glitch
-                            controller: _idController,
-                            decoration: InputDecoration(
-                              labelText: 'e-Shram ID / Phone',
-                              labelStyle: TextStyle(color: Colors.grey.shade600),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide.none,
-                              ),
-                              prefixIcon: const Icon(
-                                Icons.badge_rounded,
-                                color: Colors.indigo,
-                              ),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 20,
-                                horizontal: 20,
-                              ),
-                            ),
-                            keyboardType: TextInputType.number,
-                            onSubmitted: (_) => _sendOtp(),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _sendOtp,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.indigo,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(double.infinity, 56),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: const Text('Send OTP', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              const Expanded(child: Divider()),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                child: Text('OR', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold)),
-                              ),
-                              const Expanded(child: Divider()),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          OutlinedButton.icon(
-                            onPressed: _biometricAuth,
-                            icon: const Icon(Icons.fingerprint_rounded, size: 28),
-                            label: const Text('Login with Fingerprint', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.indigo,
-                              side: const BorderSide(color: Colors.indigo, width: 1.5),
-                              minimumSize: const Size(double.infinity, 56),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ] else ...[
-                          TextField(
-                            key: const ValueKey('otp_field'), // Fixes element retention glitch
-                            controller: _otpController,
-                            decoration: InputDecoration(
-                              labelText: 'Enter 6-digit OTP',
-                              labelStyle: TextStyle(color: Colors.grey.shade600),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide.none,
-                              ),
-                              prefixIcon: const Icon(Icons.password_rounded, color: Colors.indigo),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-                            ),
-                            keyboardType: TextInputType.number,
-                            maxLength: 6,
-                            onSubmitted: (_) => _verifyOtp(),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _verifyOtp,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.indigo,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(double.infinity, 56),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              elevation: 0,
-                            ),
-                            child: const Text('Verify & Login', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _isOtpSent = false;
-                                _otpController.clear();
-                              });
-                            },
-                            child: const Text('Edit Phone Number/ID', style: TextStyle(color: Colors.indigo, fontWeight: FontWeight.w600)),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const Spacer(),
-                  const Text(
-                    'Protected by modern parametric insurance protocols.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black38, fontSize: 13),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
+    return Scaffold(
+      backgroundColor: const Color(0xfff5f7fa),
+      appBar: AppBar(title: Text(_currentStep == 1 ? 'e-Shram Login' : 'Verification'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 40),
+              if (_currentStep == 1) _buildEShramStep(),
+              if (_currentStep == 2) _buildPhoneStep(),
+              if (_currentStep == 3) _buildOtpStep(),
+            ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildEShramStep() {
+    return Column(
+      children: [
+        const Icon(Icons.badge_rounded, size: 80, color: Colors.indigo),
+        const SizedBox(height: 32),
+        const Text('Step 1: e-Shram Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        TextField(controller: _eshramController, decoration: InputDecoration(labelText: 'e-Shram ID', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number),
+        const SizedBox(height: 24),
+        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _handleEShramSubmit, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Continue')),
+      ],
+    );
+  }
+
+  Widget _buildPhoneStep() {
+    return Column(
+      children: [
+        const Icon(Icons.phone_android_rounded, size: 80, color: Colors.indigo),
+        const SizedBox(height: 32),
+        const Text('Step 2: SMS Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        TextField(controller: _phoneController, decoration: InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.phone),
+        const SizedBox(height: 24),
+        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _sendOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Send OTP')),
+      ],
+    );
+  }
+
+  Widget _buildOtpStep() {
+    return Column(
+      children: [
+        const Icon(Icons.lock_person_rounded, size: 80, color: Colors.indigo),
+        const SizedBox(height: 32),
+        const Text('Enter 6-digit OTP', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        TextField(controller: _otpController, decoration: InputDecoration(labelText: 'OTP (use 123456)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number, maxLength: 6),
+        const SizedBox(height: 24),
+        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _verifyOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Verify & Login')),
+      ],
     );
   }
 }

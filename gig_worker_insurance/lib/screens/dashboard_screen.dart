@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
-import 'claim_result_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'tickets_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -10,315 +12,320 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  double riskScore = 0.0;
-  int premium = 0;
-  int coverage = 0;
+  final _supabase = Supabase.instance.client;
+  final _storage = const FlutterSecureStorage();
+  
+  bool _isLoading = true;
+  String _workerName = "Rahul";
+  bool _hasBoughtPremium = true;
+
+  // Real-time data metrics
+  String _disturbancesCount = '0';
+  String _amountPaidCount = '₹0';
+  String _claimsCount = '0';
+  String _fraudsCount = '0';
+  List<Map<String, dynamic>> _recentActivity = [];
 
   @override
   void initState() {
     super.initState();
-    _refreshRisk();
+    _fetchRealDashboardData();
   }
 
-  void _refreshRisk() async {
+  Future<void> _fetchRealDashboardData() async {
+    setState(() => _isLoading = true);
     try {
-      final data = await ApiService.getRisk();
+      // 1. Get the worker's data
+      final worker = await _supabase.from('workers').select().order('created_at', ascending: false).limit(1).maybeSingle();
+      
+      if (worker != null) {
+        final int workerId = worker['id'];
 
-      setState(() {
-        riskScore = data["risk_score"] ?? 0.0;
-        premium = data["premium"] ?? 0;
-        coverage = data["coverage"] ?? (premium * 20);
-      });
+        // 2. Fetch "Disturbances" (Total claims created by this worker)
+        final claimsResponse = await _supabase
+            .from('claims')
+            .select('id')
+            .eq('worker_id', workerId);
+        _claimsCount = claimsResponse.length.toString();
+        _disturbancesCount = _claimsCount;
+
+        // 3. Fetch "Amount Paid"
+        final payoutsResponse = await _supabase
+            .from('payouts')
+            .select('amount')
+            .eq('worker_id', workerId)
+            .eq('status', 'paid');
+        double totalPaid = 0;
+        for (var p in payoutsResponse) {
+          totalPaid += (p['amount'] as num).toDouble();
+        }
+        _amountPaidCount = '₹${totalPaid.toStringAsFixed(0)}';
+
+        // 4. Fetch "Frauds Detected"
+        final fraudsResponse = await _supabase
+            .from('fraud_logs')
+            .select('id')
+            .eq('worker_id', workerId)
+            .eq('status', 'pending');
+        _fraudsCount = fraudsResponse.length.toString();
+
+        // 5. Fetch Recent Activity
+        final activityResponse = await _supabase
+            .from('claims')
+            .select()
+            .eq('worker_id', workerId)
+            .order('created_at', ascending: false)
+            .limit(3);
+        _recentActivity = List<Map<String, dynamic>>.from(activityResponse);
+      }
+
     } catch (e) {
-      debugPrint("API error: $e");
-    }
-  }
-
-  void _simulateDisruption() {
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ClaimResultScreen()),
-      );
+      debugPrint('Error loading dashboard data: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    Color riskColor = riskScore < 0.5
-        ? Colors.green.shade600
-        : Colors.orange.shade700;
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.indigo)));
+    }
 
-    String riskLabel = riskScore < 0.5
-        ? 'Low Risk'
-        : (riskScore > 0.8 ? 'High Risk' : 'Medium Risk');
+    final List<Map<String, dynamic>> metrics = [
+      {'label': 'Disturbances this week', 'value': _disturbancesCount, 'icon': Icons.warning_amber_rounded},
+      {'label': 'Amount paid this week', 'value': _amountPaidCount, 'icon': Icons.attach_money},
+      {'label': 'Claims this week', 'value': _claimsCount, 'icon': Icons.assignment_turned_in_rounded},
+      {'label': 'Frauds detected this week', 'value': _fraudsCount, 'icon': Icons.gpp_bad_rounded},
+    ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
       backgroundColor: const Color(0xfff5f7fa),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Header Section
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 24,
-                left: 24.0,
-                right: 24.0,
-                bottom: 80.0,
-              ),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.indigo, Color(0xFF3F51B5)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(40),
-                  bottomRight: Radius.circular(40),
-                ),
-              ),
+      body: CustomScrollView(
+        slivers: [
+          _buildSliverAppBar(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Hello, Rahul',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Policy Status: Active',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.person, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Content Section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  const SizedBox(height: 50),
-
-                  // Risk Card
-                  Card(
-                    elevation: 12,
-                    shadowColor: Colors.black12,
-                    color: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Risk Profile',
-                                style: Theme.of(context).textTheme.titleLarge
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.black87,
-                                    ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: riskColor.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  riskLabel,
-                                  style: TextStyle(
-                                    color: riskColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 32),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _buildStatBox(
-                                'Score',
-                                riskScore.toString(),
-                                Icons.speed_rounded,
-                                riskColor,
-                              ),
-                              _buildStatBox(
-                                'Premium',
-                                '₹$premium',
-                                Icons.payments_rounded,
-                                Colors.indigo,
-                                subText: '/wk',
-                              ),
-                              _buildStatBox(
-                                'Coverage',
-                                '₹$coverage',
-                                Icons.security_rounded,
-                                Colors.indigo,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
+                  Text('Overview', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  _buildPremiumCard(),
+                  const SizedBox(height: 12),
+                  _buildMetricsGrid(metrics),
                   const SizedBox(height: 24),
-
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _refreshRisk,
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          label: const Text(
-                            'Refresh Risk',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.indigo,
-                            backgroundColor: Colors.white,
-                            side: const BorderSide(
-                              color: Colors.indigo,
-                              width: 1.5,
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  ElevatedButton.icon(
-                    onPressed: _simulateDisruption,
-                    icon: const Icon(
-                      Icons.warning_amber_rounded,
-                      size: 22,
-                      color: Colors.white,
-                    ),
-                    label: const Text(
-                      'Simulate Disruption',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange.shade600,
-                      minimumSize: const Size(double.infinity, 64),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      elevation: 8,
-                      shadowColor: Colors.orange.shade300,
-                    ),
-                  ),
-
+                  Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
+                  if (_recentActivity.isEmpty)
+                    const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
                   const SizedBox(height: 40),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSliverAppBar() {
+    return SliverAppBar(
+      expandedHeight: 180,
+      pinned: true,
+      automaticallyImplyLeading: false,
+      backgroundColor: Colors.indigo,
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.indigo, Color(0xFF3F51B5)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 24, right: 24, top: 60),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Hello, $_workerName', 
+                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(_hasBoughtPremium ? 'Premium Active for this week' : 'No active premium',
+                      style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                  ],
+                ),
+                Transform.translate(
+                  offset: const Offset(0, -5),
+                  child: const CircleAvatar(
+                    radius: 28,
+                    backgroundColor: Colors.white24,
+                    child: Icon(Icons.person, size: 35, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumCard() {
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const Icon(Icons.stars_rounded, color: Colors.indigo, size: 32),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Text('Buy premium for next week', 
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo)),
+            ),
+            const Text('₹150', 
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.indigo)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatBox(
-    String label,
-    String value,
-    IconData icon,
-    Color color, {
-    String subText = '',
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: color.withValues(alpha: 0.8), size: 28),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                color: Colors.black87,
-                letterSpacing: -0.5,
-              ),
-            ),
-            if (subText.isNotEmpty)
-              Text(
-                subText,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black54,
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: Colors.grey.shade600,
-            fontWeight: FontWeight.w600,
+  Widget _buildMetricsGrid(List<Map<String, dynamic>> metrics) {
+    return GridView.count(
+      shrinkWrap: true,
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.4,
+      children: metrics.map((m) => Card(
+        elevation: 2,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(m['icon'] as IconData, color: Colors.indigo, size: 24),
+              const SizedBox(height: 4),
+              Text(m['value'] as String,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(m['label'] as String,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
           ),
         ),
+      )).toList(),
+    );
+  }
+
+  Widget _buildActivityTile(Map<String, dynamic> data) {
+    bool isPaid = data['is_paid'] == true;
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: isPaid ? Colors.green.shade50 : Colors.orange.shade50,
+          child: Icon(Icons.receipt_long_rounded, color: isPaid ? Colors.green : Colors.orange, size: 20),
+        ),
+        title: Text('Claim ${data['trigger_type'] ?? 'ID #' + data['id'].toString()}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text(data['created_at'].toString().substring(0, 10), style: const TextStyle(fontSize: 12)),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isPaid ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(isPaid ? 'PAID' : 'PENDING', 
+            style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
+        ),
+      ),
+    );
+  }
+}
+
+// Persistent Navigation Setup
+class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
+  @override
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+}
+
+class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  int _selectedTab = 0;
+  final _tab1navigatorKey = GlobalKey<NavigatorState>();
+  final _tab2navigatorKey = GlobalKey<NavigatorState>();
+  final _tab3navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return PersistentBottomBarScaffold(
+      items: [
+        PersistentTabItem(tab: const DashboardScreen(), icon: Icons.home, title: 'Home', navigatorkey: _tab1navigatorKey),
+        PersistentTabItem(tab: const TicketsScreen(), icon: Icons.confirmation_number_rounded, title: 'Tickets', navigatorkey: _tab2navigatorKey),
+        PersistentTabItem(tab: const ProfileScreen(), icon: Icons.person, title: 'Profile', navigatorkey: _tab3navigatorKey),
       ],
     );
   }
+}
+
+class PersistentBottomBarScaffold extends StatefulWidget {
+  final List<PersistentTabItem> items;
+  const PersistentBottomBarScaffold({super.key, required this.items});
+  @override
+  State<PersistentBottomBarScaffold> createState() => _PersistentBottomBarScaffoldState();
+}
+
+class _PersistentBottomBarScaffoldState extends State<PersistentBottomBarScaffold> {
+  int _selectedTab = 0;
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (val, result) async {
+        if (widget.items[_selectedTab].navigatorkey?.currentState?.canPop() ?? false) {
+          widget.items[_selectedTab].navigatorkey?.currentState?.pop();
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: _selectedTab,
+          children: widget.items.map((page) => Navigator(
+            key: page.navigatorkey,
+            onGenerateInitialRoutes: (navigator, initialRoute) => [MaterialPageRoute(builder: (context) => page.tab)],
+          )).toList(),
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedTab,
+          selectedItemColor: Colors.indigo,
+          onTap: (index) => setState(() => _selectedTab = index),
+          items: widget.items.map((item) => BottomNavigationBarItem(icon: Icon(item.icon), label: item.title)).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class PersistentTabItem {
+  final Widget tab;
+  final GlobalKey<NavigatorState>? navigatorkey;
+  final String title;
+  final IconData icon;
+  PersistentTabItem({required this.tab, this.navigatorkey, required this.title, required this.icon});
 }
