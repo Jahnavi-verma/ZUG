@@ -1,9 +1,14 @@
 # pyre-ignore-all-errors
+import sys
+import os
 from fastapi import FastAPI
+
+# Add the project root to sys.path so 'backend' is recognized as a package
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from backend.services.weather_service import weather_service
 from backend.services.traffic_service import traffic_service
 from backend.services.rto_service import rto_service
-
 from backend.utils.risk_engine import calculate_final_result
 
 app = FastAPI()
@@ -43,3 +48,7 @@ def predict_risk():
             "rto": rto
         }
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
