@@ -3,33 +3,28 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  // Use your Mac's network IP: 10.210.29.152
-  static const _macIp = "10.210.29.152";
+  static String _baseUrl = "http://10.210.29.152:8000"; // Default fallback
 
-  static const baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://$_macIp:8000";
+  /// Allows the SDK to set the backend URL dynamically during initialization.
+  static void setBaseUrl(String url) {
+    _baseUrl = url;
+  }
 
   static Future<Map<String, dynamic>> predictRisk() async {
     try {
       final response = await http.post(
-        Uri.parse("$baseUrl/predict-risk"),
+        Uri.parse("$_baseUrl/predict-risk"),
         headers: {"Content-Type": "application/json"},
       ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        
-        // Ensure premium never exceeds 50
-        if (data['premium'] != null && data['premium'] > 50) {
-          data['premium'] = 50;
-        }
-        
-        return data;
+        return jsonDecode(response.body);
       } else {
         throw Exception("Server error: ${response.statusCode}");
       }
     } catch (e) {
       debugPrint("ApiService Error: $e");
-      // Safety Fallback with max premium cap of 50
+      // Safety Fallback so dashboard doesn't crash
       return {
         "risk_score": 0.05,
         "premium": 50,
@@ -38,7 +33,7 @@ class ApiService {
         "fraud": false,
         "payout": 0,
         "details": {
-          "weather": {"current": {"temp": 25, "rain": 0}},
+          "weather": {"current": {"temp": 25.0, "rain": 0.0}},
           "traffic": {"current": 0.3},
           "rto": {"today": 0, "mode": 0}
         }
