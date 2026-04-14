@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 # Add the project root to sys.path so 'backend' is recognized as a package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from backend.services.pricing_service import calculate_pricing
 from backend.services.weather_service import weather_service
 from backend.services.traffic_service import traffic_service
 from backend.services.rto_service import rto_service
@@ -22,23 +22,36 @@ def root():
 @app.post("/predict-risk")
 def predict_risk():
     print("API HIT")
-
+    # TEMP values (replace later with real data)
+    weekly_income = 5000
+    bracket = "B"
     # -------------------------
     # FETCH DATA
     # -------------------------
-    weather = weather_service()
-    traffic = traffic_service()
-    rto = rto_service()
+    try:
+        weather = weather_service()
+    except:
+        weather = {}
+
+    try:
+        traffic = traffic_service()
+    except:
+        traffic = {}
+
+    try:
+        rto = rto_service()
+    except:
+        rto = {}
 
     print("All services fetched")
 
     # -------------------------
     # SAFE FEATURE EXTRACTION
     # -------------------------
-    rain = weather.get("current", {}).get("rain", 0)
-    temp = weather.get("current", {}).get("temp", 0)
-    traffic_val = traffic.get("current", 0)
-    rto_val = rto.get("today", 0)
+    rain = (weather or {}).get("current", {}).get("rain", 0)
+    temp = (weather or {}).get("current", {}).get("temp", 0)
+    traffic_val = (traffic or {}).get("current", 0)
+    rto_val = (rto or {}).get("today", 0)
 
     # -------------------------
     # ML PREDICTION
@@ -77,9 +90,9 @@ def predict_risk():
     # -------------------------
     # PRICING
     # -------------------------
-    premium = int(20 + final_risk * 30)
-    coverage = premium * 20
-
+    #premium = int(20 + final_risk * 30)
+    #coverage = premium * 20
+    pricing = calculate_pricing(final_risk, weekly_income, bracket)
     # -------------------------
     # CONFIDENCE SCORE
     # -------------------------
@@ -101,12 +114,14 @@ def predict_risk():
         "rule_risk": round(rule_risk, 2),
         "confidence": confidence,
 
-        "premium": premium,
-        "coverage": coverage,
+        
+        "coverage": pricing["payout"],
 
         "trigger": trigger,
         "fraud": rto.get("fraud"),
-        "payout": rto.get("payout"),
+        "payout": pricing["payout"],
+        "premium": pricing["premium"],
+        "expected_loss": pricing["expected_loss"],
 
         "explainability": feature_contribution,
 

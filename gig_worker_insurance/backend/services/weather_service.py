@@ -18,14 +18,40 @@ HEAT_THRESHOLD = 50
 
 def fetch_current_weather():
     url = f"https://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}&units=metric"
-    data = requests.get(url, timeout=5).json()
+    try:
+        response = requests.get(url, timeout=8)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        print("Weather API failed:", e)
+        return {
+        "risk": 0,
+        "trigger": None,
+        "current": {
+            "temp": 25,
+            "rain": 0
+        }
+    }
     print("CURRENT RAW:", data)   # debug
     return data
 
 
 def fetch_forecast():
     url = f"https://api.openweathermap.org/data/2.5/forecast?q={CITY}&appid={API_KEY}&units=metric"
-    data = requests.get(url, timeout=5).json()
+    try:
+        response = requests.get(url, timeout=8)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        print("Weather API failed:", e)
+    return {
+        "risk": 0,
+        "trigger": None,
+        "current": {
+            "temp": 25,
+            "rain": 0
+        }
+    }
     print("FORECAST RAW:", data)  # debug
     return data
 
