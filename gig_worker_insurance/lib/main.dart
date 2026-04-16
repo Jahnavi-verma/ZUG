@@ -5,50 +5,22 @@ import 'zug_sdk.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables for the host app
   await dotenv.load(fileName: ".env");
 
-  // 1. Initialize the ZUG SDK with credentials
-  // This connects Supabase and the Python backend separately as requested
+  // ✅ Initialize SDK
   await ZUG.initialize(
     ZUGConfig(
       supabaseUrl: dotenv.get('SUPABASE_URL'),
       supabaseAnonKey: dotenv.get('SUPABASE_ANON_KEY'),
-      pythonBackendUrl: "http://10.210.29.152:8000", // Your Mac's IP
+
+      // ✅ USE THIS (adb reverse setup)
+      pythonBackendUrl: "http://127.0.0.1:8000",
     ),
   );
 
   runApp(const HostApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Gig Worker Insurance',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        scaffoldBackgroundColor: const Color(0xfff5f5f5),
-      ),
-      // The SDK can be launched from anywhere, here we start it as the home
-      home: Builder(builder: (context) {
-        return Scaffold(
-          body: Center(
-            child: ElevatedButton(
-              onPressed: () => ZUG.launch(context),
-              child: const Text("Launch ZUG Insurance SDK"),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-/// Example of a Host App integrating the ZUG SDK
 class HostApp extends StatelessWidget {
   const HostApp({super.key});
 
@@ -58,6 +30,8 @@ class HostApp extends StatelessWidget {
       title: 'ZUG SDK Host',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.indigo),
+
+      // ✅ RESTORE ORIGINAL FLOW
       home: const WelcomeScreen(),
     );
   }
@@ -93,13 +67,16 @@ class WelcomeScreen extends StatelessWidget {
               style: TextStyle(color: Colors.white70, fontSize: 16),
             ),
             const SizedBox(height: 60),
+
             ElevatedButton(
               onPressed: () => ZUG.launch(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.indigo,
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
               child: const Text(
                 'ENTER ZUG MODULE',

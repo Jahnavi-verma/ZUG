@@ -6,6 +6,9 @@ import '../services/valid_claim_simulator.dart';
 import '../services/fraud_claim_simulator.dart';
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,11 +19,14 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _supabase = Supabase.instance.client;
+  late Razorpay _razorpay;
   final _storage = const FlutterSecureStorage();
   
   bool _isLoading = true;
   String _workerName = "Rahul";
-  bool _hasBoughtPremium = true;
+  bool _hasBoughtPremium = false;
+
+  int _totalPayoutAccumulated = 0;
 
   // Real-time data metrics from Supabase
   String _disturbancesCount = '0';
@@ -40,10 +46,138 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _rtoMode = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _refreshDashboard();
+void initState() {
+  super.initState();
+
+  // Razorpay init
+  _razorpay = Razorpay();
+  _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+  _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+  _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+
+  _checkPremiumStatus();
+
+  // Your existing logic
+  _refreshDashboard();
+}
+
+Future<void> startPayment() async {
+  try {
+    final response = await http.post(
+      Uri.parse("http://127.0.0.1:8000/create-order"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "weekly_income": 5000,
+        "bracket": "B",
+        "premium": _calculatedPremium   // ✅ IMPORTANT
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      print("❌ ORDER ERROR: ${response.body}");
+      return;
+    }
+
+    final data = jsonDecode(response.body);
+    print("✅ ORDER CREATED: $data");
+
+    openCheckout(data);
+
+  } catch (e) {
+    print("❌ PAYMENT INIT ERROR: $e");
   }
+}
+
+Future<void> _checkPremiumStatus() async {
+  final value = await _storage.read(key: "premium_paid_at");
+
+  if (value != null) {
+    final paidAt = DateTime.parse(value);
+    final now = DateTime.now();
+
+    if (now.difference(paidAt).inDays < 7) {
+      setState(() {
+        _hasBoughtPremium = true;
+      });
+    } else {
+      await _storage.delete(key: "premium_paid_at");
+      await _storage.delete(key: "total_payout"); // ✅ ADD
+      _totalPayoutAccumulated = 0;                // ✅ ADD
+
+      setState(() {
+        _hasBoughtPremium = false;
+      });
+    }
+  }
+
+  // ✅ LOAD PAYOUT
+  final payout = await _storage.read(key: "total_payout");
+  if (payout != null) {
+    _totalPayoutAccumulated = int.parse(payout);
+  }
+}
+
+void openCheckout(dynamic data) {
+  var options = {
+    'key': 'rzp_test_SdHevaeLdpy7Ym',   // ✅ your test key
+    'amount': data['amount_paise'],
+    'order_id': data['order_id'],
+    'name': 'ZUG',
+    'description': 'Insurance Payment',
+
+    'prefill': {
+      'contact': '9999999999',
+      'email': 'test@zug.com'
+    },
+
+    'theme': {
+      'color': '#3F51B5'
+    }
+  };
+
+  try {
+    _razorpay.open(options);
+  } catch (e) {
+    print("❌ RAZORPAY ERROR: $e");
+  }
+}
+
+
+void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+  print("SUCCESS ORDER: ${response.orderId}");
+  print("SUCCESS PAYMENT: ${response.paymentId}");
+  print("SIGNATURE: ${response.signature}");
+
+   await http.post(
+  Uri.parse("http://127.0.0.1:8000/verify-payment"),
+  headers: {"Content-Type": "application/json"},
+  body: jsonEncode({
+    "order_id": response.orderId,
+    "payment_id": response.paymentId,
+    "signature": response.signature
+  }),
+);
+
+setState(() {
+  _hasBoughtPremium = true;
+});
+
+await _storage.write(
+  key: "premium_paid_at",
+  value: DateTime.now().toIso8601String(),
+);
+
+} // ✅ ADD THIS LINE
+
+void _handlePaymentError(PaymentFailureResponse response) {
+  print("❌ PAYMENT FAILED: ${response.message}");
+}
+
+
+void _handleExternalWallet(ExternalWalletResponse response) {
+  print("Wallet: ${response.walletName}");
+}
+
 
   Future<void> _refreshDashboard() async {
     setState(() => _isLoading = true);
@@ -70,7 +204,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _traffic = (trafficData['current'] ?? 0.0).toDouble();
           
           _fraudAlert = data['fraud'] ?? false;
-          _potentialPayout = (data['payout'] ?? 0).toInt();
+         
+         final newPayout = (data['payout'] ?? 0).toInt();
+
+final maxLimit = _calculatedPremium * 2;
+
+if (_hasBoughtPremium && _totalPayoutAccumulated < maxLimit) {
+  _totalPayoutAccumulated += newPayout;
+
+  if (_totalPayoutAccumulated > maxLimit) {
+    _totalPayoutAccumulated = maxLimit;
+  }
+
+  // save payout
+  await _storage.write(
+    key: "total_payout",
+    value: _totalPayoutAccumulated.toString(),
+  );
+}
+
+// display accumulated payout
+_potentialPayout = _totalPayoutAccumulated;
           
           final rtoData = details['rto'] ?? {};
           _rtoToday = (rtoData['today'] ?? 0).toInt();
@@ -182,8 +336,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text('PAYOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-            Text('₹$_potentialPayout', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.indigo, fontSize: 18)),
-          ],
+            Column(
+  crossAxisAlignment: CrossAxisAlignment.end,
+  children: [
+    Text(
+      '₹$_totalPayoutAccumulated',
+      style: const TextStyle(
+        fontWeight: FontWeight.w900,
+        color: Colors.indigo,
+        fontSize: 18,
+      ),
+    ),
+    Text(
+      '/ ₹${_calculatedPremium * 2}',
+      style: const TextStyle(fontSize: 10, color: Colors.grey),
+    ),
+    if (_totalPayoutAccumulated >= _calculatedPremium * 2)
+      const Text(
+        "⚠ Max limit reached",
+        style: TextStyle(color: Colors.red, fontSize: 10),
+      ),
+  ],
+)
         ),
       ),
     );
@@ -283,34 +457,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildPremiumCard() {
-    return Card(
-      elevation: 2,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            const Icon(Icons.stars_rounded, color: Colors.indigo, size: 32),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Next week premium price:', 
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo)),
-                  Text('RTO Benchmarking: $_rtoToday (vs avg $_rtoMode)', 
-                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
-              ),
+  return Card(
+    elevation: 2,
+    margin: EdgeInsets.zero,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          const Icon(Icons.stars_rounded, color: Colors.indigo, size: 32),
+          const SizedBox(width: 16),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Next week premium price:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.indigo,
+                  ),
+                ),
+                Text(
+                  'RTO Benchmarking: $_rtoToday (vs avg $_rtoMode)',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
             ),
-            Text('₹$_calculatedPremium', 
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.indigo)),
-          ],
-        ),
+          ),
+
+          // 👉 RIGHT SIDE (price + button)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '₹$_calculatedPremium',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  color: Colors.indigo,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _hasBoughtPremium
+  ? Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.green,
+        borderRadius: BorderRadius.circular(8),
       ),
-    );
-  }
+      child: Text(
+        "✅ Paid",
+        style: TextStyle(color: Colors.white),
+      ),
+    )
+  : ElevatedButton(
+      onPressed: startPayment,
+      child: Text("Pay"),
+    )
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildMetricsGrid(List<Map<String, dynamic>> metrics) {
     return GridView.count(
@@ -370,6 +583,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
 
 // Main Navigation & Persistance (Refactored for correctness)
 class MainNavigationScreen extends StatefulWidget {
