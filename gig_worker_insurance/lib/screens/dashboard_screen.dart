@@ -4,7 +4,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/valid_claim_simulator.dart';
 import '../services/fraud_claim_simulator.dart';
+<<<<<<< HEAD
 import '../zug_sdk.dart';
+=======
+>>>>>>> 15e8268 (ML upgraded+payout normalised)
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
 
@@ -124,6 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xfff5f7fa),
+<<<<<<< HEAD
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: CustomScrollView(
@@ -154,6 +158,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 40),
                   ],
                 ),
+=======
+      body: CustomScrollView(
+        slivers: [
+          _buildSliverAppBar(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLiveStatusCard(),
+                  const SizedBox(height: 12),
+                  if (_fraudAlert) _buildFraudWarningCard(),
+                  if (_fraudAlert) const SizedBox(height: 12),
+                  _buildPremiumCard(),
+                  const SizedBox(height: 12),
+                  _buildSimulationRow(),
+                  const SizedBox(height: 12),
+                  _buildMetricsGrid(metrics),
+                  const SizedBox(height: 24),
+                  Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
+                  if (_recentActivity.isEmpty)
+                    const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
+                  const SizedBox(height: 40),
+                ],
+>>>>>>> 15e8268 (ML upgraded+payout normalised)
               ),
             ),
           ],
@@ -216,6 +248,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+<<<<<<< HEAD
+=======
+  Widget _buildLiveStatusCard() {
+    bool hasAlert = _backendTrigger != null;
+    return Card(
+      elevation: 4,
+      color: hasAlert ? Colors.orange.shade50 : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: hasAlert ? BorderSide(color: Colors.orange.shade300, width: 2) : BorderSide.none,
+      ),
+      child: ListTile(
+        leading: Icon(
+          hasAlert ? Icons.warning_amber_rounded : Icons.cloud_done_rounded,
+          color: hasAlert ? Colors.orange : Colors.green,
+          size: 32,
+        ),
+        title: Text(
+          hasAlert ? 'Alert: $_backendTrigger Detected' : 'Environment: Normal',
+          style: TextStyle(fontWeight: FontWeight.bold, color: hasAlert ? Colors.orange.shade900 : Colors.green.shade900),
+        ),
+        subtitle: Text('Temp: ${_weather['temp'] ?? '--'}°C | Rain: ${_weather['rain'] ?? '0'}mm | Traffic: ${(_traffic * 10).toStringAsFixed(1)}/10'),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('PAYOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text('₹$_potentialPayout', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.indigo, fontSize: 18)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFraudWarningCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.gpp_maybe_rounded, color: Colors.red),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'High Fraud Probability Detected in your RTO patterns. Claims may be flagged for manual review.',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+>>>>>>> 15e8268 (ML upgraded+payout normalised)
   Widget _buildSimulationRow() {
     return Row(
       children: [
