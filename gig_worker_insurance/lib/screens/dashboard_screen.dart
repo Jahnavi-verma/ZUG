@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/valid_claim_simulator.dart';
 import '../services/fraud_claim_simulator.dart';
+import '../zug_sdk.dart';
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
 
@@ -19,7 +20,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _storage = const FlutterSecureStorage();
   
   bool _isLoading = true;
-  String _workerName = "Rahul";
   bool _hasBoughtPremium = true;
 
   // Real-time data metrics from Supabase
@@ -124,36 +124,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xfff5f7fa),
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLiveStatusCard(),
-                  const SizedBox(height: 12),
-                  if (_fraudAlert) _buildFraudWarningCard(),
-                  if (_fraudAlert) const SizedBox(height: 12),
-                  _buildPremiumCard(),
-                  const SizedBox(height: 12),
-                  _buildSimulationRow(),
-                  const SizedBox(height: 12),
-                  _buildMetricsGrid(metrics),
-                  const SizedBox(height: 24),
-                  Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
-                  if (_recentActivity.isEmpty)
-                    const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
-                  const SizedBox(height: 40),
-                ],
+      body: RefreshIndicator(
+        onRefresh: _refreshDashboard,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildSliverAppBar(),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLiveStatusCard(),
+                    const SizedBox(height: 12),
+                    if (_fraudAlert) _buildFraudWarningCard(),
+                    if (_fraudAlert) const SizedBox(height: 12),
+                    _buildPremiumCard(),
+                    const SizedBox(height: 12),
+                    _buildSimulationRow(),
+                    const SizedBox(height: 12),
+                    _buildMetricsGrid(metrics),
+                    const SizedBox(height: 24),
+                    Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
+                    if (_recentActivity.isEmpty)
+                      const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -266,8 +270,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Hello, $_workerName', 
-                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                    ValueListenableBuilder<String>(
+                      valueListenable: ZUG.userName,
+                      builder: (context, name, _) {
+                        return Text('Hello, $name', 
+                          style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold));
+                      }
+                    ),
                     const SizedBox(height: 4),
                     Text(_hasBoughtPremium ? 'Premium Active for this week' : 'No active premium',
                       style: const TextStyle(color: Colors.white70, fontSize: 14)),
@@ -387,6 +396,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return PersistentBottomBarScaffold(
+      onTabChanged: (index) {
+      },
       items: [
         PersistentTabItem(tab: const DashboardScreen(), icon: Icons.home, title: 'Home', navigatorkey: _tab1navigatorKey),
         PersistentTabItem(tab: const TicketsScreen(), icon: Icons.confirmation_number_rounded, title: 'Tickets', navigatorkey: _tab2navigatorKey),
@@ -398,7 +409,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
 class PersistentBottomBarScaffold extends StatefulWidget {
   final List<PersistentTabItem> items;
-  const PersistentBottomBarScaffold({super.key, required this.items});
+  final Function(int)? onTabChanged;
+  const PersistentBottomBarScaffold({super.key, required this.items, this.onTabChanged});
   @override
   State<PersistentBottomBarScaffold> createState() => _PersistentBottomBarScaffoldState();
 }
@@ -425,7 +437,10 @@ class _PersistentBottomBarScaffoldState extends State<PersistentBottomBarScaffol
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedTab,
           selectedItemColor: Colors.indigo,
-          onTap: (index) => setState(() => _selectedTab = index),
+          onTap: (index) {
+            setState(() => _selectedTab = index);
+            widget.onTabChanged?.call(index);
+          },
           items: widget.items.map((item) => BottomNavigationBarItem(icon: Icon(item.icon), label: item.title)).toList(),
         ),
       ),

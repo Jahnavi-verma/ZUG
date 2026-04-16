@@ -9,12 +9,12 @@ void main() async {
   await dotenv.load(fileName: ".env");
 
   // 1. Initialize the ZUG SDK with credentials
-  // This connects Supabase and the Python backend separately as requested
+  // UPDATED IP: 10.210.9.203
   await ZUG.initialize(
     ZUGConfig(
       supabaseUrl: dotenv.get('SUPABASE_URL'),
       supabaseAnonKey: dotenv.get('SUPABASE_ANON_KEY'),
-      pythonBackendUrl: "http://10.210.29.152:8000", // Your Mac's IP
+      pythonBackendUrl: "http://10.210.9.203:8000",
     ),
   );
 
