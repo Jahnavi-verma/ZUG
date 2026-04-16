@@ -8,9 +8,12 @@ load_dotenv()
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 CITY = os.getenv("CITY")
 
-RAIN_THRESHOLD = 70
-HEAT_THRESHOLD = 50
+# -------------------------
+# CONFIG (EXTREME EVENTS)
+# -------------------------
 
+RAIN_THRESHOLD = 70      # mm/day (extreme rain)
+HEAT_THRESHOLD = 50      # °C (extreme heat)
 
 # -------------------------
 # API CALLS
@@ -22,18 +25,14 @@ def fetch_current_weather():
         response = requests.get(url, timeout=8)
         response.raise_for_status()
         data = response.json()
+        print("CURRENT RAW:", data)
+        return data
     except Exception as e:
-        print("Weather API failed:", e)
+        print("Weather API failed (current):", e)
         return {
-        "risk": 0,
-        "trigger": None,
-        "current": {
-            "temp": 25,
-            "rain": 0
+            "main": {"temp": 25},
+            "rain": {"1h": 0}
         }
-    }
-    print("CURRENT RAW:", data)   # debug
-    return data
 
 
 def fetch_forecast():
@@ -42,32 +41,27 @@ def fetch_forecast():
         response = requests.get(url, timeout=8)
         response.raise_for_status()
         data = response.json()
+        print("FORECAST RAW:", data)
+        return data
     except Exception as e:
-        print("Weather API failed:", e)
-    return {
-        "risk": 0,
-        "trigger": None,
-        "current": {
-            "temp": 25,
-            "rain": 0
-        }
-    }
-    print("FORECAST RAW:", data)  # debug
-    return data
+        print("Weather API failed (forecast):", e)
+        return {"list": []}   # ✅ correct fallback
 
 
 # -------------------------
-# PREDICTIVE LOGIC (FORECAST)
+# WEEKLY RISK LOGIC
 # -------------------------
 
 def calculate_weather_risk(forecast_data):
-    if "list" not in forecast_data:
-        print("Forecast API failed:", forecast_data)
+    if "list" not in forecast_data or not forecast_data["list"]:
         return 0
 
     daily_rain = {}
-    high_heat_days = 0
+    max_temp = -100
 
+    # -------------------------
+    # Aggregate forecast → daily
+    # -------------------------
     for item in forecast_data["list"]:
         date = item["dt_txt"].split(" ")[0]
 
@@ -75,19 +69,37 @@ def calculate_weather_risk(forecast_data):
         rain = item.get("rain", {}).get("3h", 0)
 
         daily_rain[date] = daily_rain.get(date, 0) + rain
+        max_temp = max(max_temp, temp)
 
-        if temp > HEAT_THRESHOLD:
-            high_heat_days += 1
+    # -------------------------
+    # Weekly signals
+    # -------------------------
+    total_week_rain = sum(daily_rain.values())
+    max_daily_rain = max(daily_rain.values()) if daily_rain else 0
+    rainy_days = sum(1 for r in daily_rain.values() if r > 0)
 
-    high_rain_days = sum(1 for r in daily_rain.values() if r > RAIN_THRESHOLD)
-
+    # -------------------------
+    # Risk calculation (EXTREME focused)
+    # -------------------------
     risk = 0
-    if high_rain_days >= 2:
-        risk += 0.3
-    if high_heat_days >= 2:
+
+    # Extreme single-day event
+    if max_daily_rain > RAIN_THRESHOLD:
         risk += 0.3
 
-    return risk
+    # Sustained bad week
+    if total_week_rain > (RAIN_THRESHOLD * 2):
+        risk += 0.2
+
+    # Persistent disruption
+    if rainy_days >= 3:
+        risk += 0.1
+
+    # Extreme heat
+    if max_temp > HEAT_THRESHOLD:
+        risk += 0.3
+
+    return min(risk, 0.6)
 
 
 # -------------------------
@@ -96,12 +108,12 @@ def calculate_weather_risk(forecast_data):
 
 def check_weather_trigger(current_data):
     if "main" not in current_data:
-        print("Current weather API failed:", current_data)
         return None
 
     temp = current_data.get("main", {}).get("temp", 0)
     rain = current_data.get("rain", {}).get("1h", 0)
 
+    # Extreme real-time triggers only
     if rain > RAIN_THRESHOLD:
         return "RAIN"
 
@@ -119,18 +131,22 @@ def weather_service():
     current = fetch_current_weather()
     forecast = fetch_forecast()
 
-    # fallback safety
-    if "main" not in current:
-        current = {"main": {"temp": 0}}
+    risk = calculate_weather_risk(forecast)
+    trigger = check_weather_trigger(current)
 
-    if "list" not in forecast:
-        forecast = {"list": []}
+    # Optional: predictive trigger (if extreme week ahead)
+    if not trigger and risk >= 0.3:
+        trigger = "FORECAST_EXTREME"
 
     return {
-        "risk": calculate_weather_risk(forecast),
-        "trigger": check_weather_trigger(current),
+        "risk": round(risk, 2),
+        "trigger": trigger,
         "current": {
-            "temp": current.get("main", {}).get("temp", 0),
+            "temp": current.get("main", {}).get("temp", 25),
             "rain": current.get("rain", {}).get("1h", 0)
+        },
+        # useful for debugging/demo
+        "meta": {
+            "city": CITY
         }
     }

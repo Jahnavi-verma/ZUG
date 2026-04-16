@@ -5,39 +5,58 @@
 # -----------------------------
 
 BRACKETS = {
-    "A": {"base_cost": 5, "risk_multiplier": 0.8},
-    "B": {"base_cost": 8, "risk_multiplier": 1.0},
-    "C": {"base_cost": 12, "risk_multiplier": 1.2},
-    "D": {"base_cost": 15, "risk_multiplier": 1.5},
+    "A": {
+        "risk_multiplier": 0.8,
+        "premium_range": (10, 20),
+        "rep_income": 3000   # representative weekly income
+    },
+    "B": {
+        "risk_multiplier": 1.0,
+        "premium_range": (20, 30),
+        "rep_income": 5000
+    },
+    "C": {
+        "risk_multiplier": 1.2,
+        "premium_range": (30, 40),
+        "rep_income": 7000
+    },
+    "D": {
+        "risk_multiplier": 1.5,
+        "premium_range": (40, 50),
+        "rep_income": 10000
+    },
 }
 
-MAX_PAYOUT_BY_BRACKET = {
-    "A": 50,
-    "B": 80,
-    "C": 100,
-    "D": 120
-}
-
-MAX_PREMIUM = 50
-TAX_RATE = 0.18
-LOSS_RATIO_TARGET = 0.6   # <-- configurable profitability control
-
+MAX_PAYOUT = 100
+LOSS_RATIO_TARGET = 0.6
+EVENT_PROBABILITY = 0.2
 
 # -----------------------------
 # HELPERS
 # -----------------------------
 
 def clamp_risk(risk):
-    # prevent extreme behavior
     risk = max(0.0, min(risk, 1.0))
-    return max(0.05, min(risk, 0.5))  # bounded risk
+    return max(0.05, min(risk, 0.9))
 
+
+def get_bracket(weekly_income):
+    if weekly_income <= 4000:
+        return "A"
+    elif weekly_income <= 6000:
+        return "B"
+    elif weekly_income <= 8000:
+        return "C"
+    else:
+        return "D"
+
+#check
 
 # -----------------------------
 # MAIN FUNCTION
 # -----------------------------
 
-def calculate_pricing(risk, weekly_income, bracket):
+def calculate_pricing(risk, weekly_income):
 
     # -------------------------
     # Step 1: sanitize
@@ -45,72 +64,58 @@ def calculate_pricing(risk, weekly_income, bracket):
     risk = clamp_risk(risk)
     weekly_income = max(0, weekly_income)
 
-    config = BRACKETS.get(bracket, BRACKETS["B"])
-    base_cost = config["base_cost"]
+    # -------------------------
+    # Step 2: bucket income
+    # -------------------------
+    bracket = get_bracket(weekly_income)
+    config = BRACKETS[bracket]
+
     risk_multiplier = config["risk_multiplier"]
+    min_p, max_p = config["premium_range"]
+    rep_income = config["rep_income"]   # ✅ USE THIS, NOT raw income
 
     adjusted_risk = risk * risk_multiplier
 
     # -------------------------
-    # Step 2: payout (tier + income blend)
+    # Step 3: premium (banded)
+    # -------------------------
+    premium = min_p + (max_p - min_p) * (0.3*adjusted_risk)
+    premium = round(premium, 2)
+
+    # -------------------------
+    # Step 4: payout (based on representative income)
     # -------------------------
     raw_payout = min(
-        MAX_PAYOUT_BY_BRACKET.get(bracket, 80),
-        0.3 * weekly_income   # keeps some realism
+        MAX_PAYOUT,
+        0.5 * rep_income   # ✅ uses bucketed income
     )
 
-    # -------------------------
-    # Step 3: initial premium
-    # -------------------------
-    expected_loss = adjusted_risk * raw_payout
-    premium = base_cost + expected_loss
+    payout = min(
+        raw_payout,
+        2 * premium,
+        (LOSS_RATIO_TARGET / max(adjusted_risk, 0.01)) * premium
+    )
+
+    payout = round(payout, 2)
 
     # -------------------------
-    # Step 4: cap premium
+    # Step 5: expected loss
     # -------------------------
-    premium = min(premium, MAX_PREMIUM)
-    is_capped = premium >= MAX_PREMIUM
+    expected_loss = adjusted_risk * payout * EVENT_PROBABILITY
 
-    # -------------------------
-    # Step 5: enforce constraints
-    # -------------------------
-    if adjusted_risk > 0:
-        payout = min(
-            raw_payout,
-            2 * premium,
-            (LOSS_RATIO_TARGET / adjusted_risk) * premium
-        )
-    else:
-        payout = min(raw_payout, 2 * premium)
-
-    # -------------------------
-    # Step 6: recompute expected loss
-    # -------------------------
-    expected_loss = adjusted_risk * payout
-
-    # -------------------------
-    # Step 7: apply tax
-    # -------------------------
-    premium_with_tax = premium * (1 + TAX_RATE)
-    premium_with_tax = min(premium_with_tax, MAX_PREMIUM)
-
-    # -------------------------
-    # Step 8: debug / audit info
-    # -------------------------
     loss_ratio = expected_loss / premium if premium > 0 else 0
 
     # -------------------------
-    # Step 9: return
+    # Step 6: return
     # -------------------------
     return {
-        "premium": round(premium_with_tax, 2),
-        "payout": round(payout, 2),
+        "premium": premium,
+        "payout": payout,
         "expected_loss": round(expected_loss, 2),
 
-        # --- observability ---
+        # observability
         "risk": round(risk, 3),
         "adjusted_risk": round(adjusted_risk, 3),
         "bracket": bracket,
-        "is_capped": is_capped,
         "loss_ratio": round(loss_ratio, 2)
     }

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:persistent_device_id/persistent_device_id.dart';
 import '../services/telemetry_service.dart';
 import 'dashboard_screen.dart';
+import 'terms_conditions_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -61,7 +62,16 @@ class _LoginScreenState extends State<LoginScreen> {
             if (didAuthenticate) {
               TelemetryService().startTracking();
               setState(() => _isLoading = false);
-              _navigateToHome();
+              
+              // Check if terms are already accepted
+              bool termsAccepted = existingWorker['terms_accepted'] == true;
+              if (!termsAccepted) {
+                // Double check local storage
+                final localTerms = await _storage.read(key: 'terms_accepted');
+                termsAccepted = localTerms == 'true';
+              }
+
+              _proceed(termsAccepted: termsAccepted);
               return;
             }
           }
@@ -109,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // 2. Biometric check (replacing camera liveness)
+      // 2. Biometric check
       try {
         final bool didAuthenticate = await _auth.authenticate(
           localizedReason: 'Verify fingerprint to link your account to this device',
@@ -147,7 +157,14 @@ class _LoginScreenState extends State<LoginScreen> {
         await _storage.write(key: 'last_sms_date', value: DateTime.now().toIso8601String());
 
         TelemetryService().startTracking();
-        _navigateToHome();
+
+        bool termsAccepted = response['terms_accepted'] == true;
+        if (!termsAccepted) {
+          final localTerms = await _storage.read(key: 'terms_accepted');
+          termsAccepted = localTerms == 'true';
+        }
+
+        _proceed(termsAccepted: termsAccepted);
       } catch (e) {
         debugPrint('Sync failed: $e');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -159,8 +176,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _navigateToHome() {
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainNavigationScreen()));
+  void _proceed({required bool termsAccepted}) {
+    if (termsAccepted) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainNavigationScreen()));
+    } else {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TermsConditionsScreen()));
+    }
   }
 
   @override

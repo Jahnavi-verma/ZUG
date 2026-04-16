@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  static String _baseUrl = "http://10.210.29.152:8000"; // Default fallback
+  static String _baseUrl = "http://10.210.9.203:8000"; // Updated to current IP
 
   /// Allows the SDK to set the backend URL dynamically during initialization.
   static void setBaseUrl(String url) {

@@ -4,6 +4,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/valid_claim_simulator.dart';
 import '../services/fraud_claim_simulator.dart';
+import '../services/api_service.dart';
+import '../services/valid_claim_simulator.dart';
+import '../services/fraud_claim_simulator.dart';
+import '../zug_sdk.dart';
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
 import 'dart:convert';
@@ -28,12 +32,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   int _totalPayoutAccumulated = 0;
 
-  // Real-time data metrics from Supabase
+  // Real-time data metrics from Supabase from Supabase
   String _disturbancesCount = '0';
   String _amountPaidCount = '₹0';
   String _claimsCount = '0';
   String _fraudsCount = '0';
   List<Map<String, dynamic>> _recentActivity = [];
+
+  // Data from Python Backend
+  int _calculatedPremium = 150;
+  String? _backendTrigger;
+  Map<String, dynamic> _weather = {};
+  double _traffic = 0.0;
+  bool _fraudAlert = false;
+  int _potentialPayout = 0;
+  int _rtoToday = 0;
+  int _rtoMode = 0;
 
   // Data from Python Backend
   int _calculatedPremium = 150;
@@ -245,7 +259,21 @@ _potentialPayout = _totalPayoutAccumulated;
       final claimsResponse = await _supabase.from('claims').select('id').eq('worker_id', workerId);
       _claimsCount = claimsResponse.length.toString();
       _disturbancesCount = _claimsCount;
+    try {
+      final workerIdStr = await _storage.read(key: 'worker_id');
+      if (workerIdStr == null) return;
+      final int workerId = int.parse(workerIdStr);
 
+      final claimsResponse = await _supabase.from('claims').select('id').eq('worker_id', workerId);
+      _claimsCount = claimsResponse.length.toString();
+      _disturbancesCount = _claimsCount;
+
+      final payoutsResponse = await _supabase.from('payouts').select('amount').eq('worker_id', workerId).eq('status', 'paid');
+      double totalPaid = 0;
+      for (var p in payoutsResponse) {
+        totalPaid += (p['amount'] as num).toDouble();
+      }
+      _amountPaidCount = '₹${totalPaid.toStringAsFixed(0)}';
       final payoutsResponse = await _supabase.from('payouts').select('amount').eq('worker_id', workerId).eq('status', 'paid');
       double totalPaid = 0;
       for (var p in payoutsResponse) {
@@ -255,10 +283,15 @@ _potentialPayout = _totalPayoutAccumulated;
 
       final fraudsResponse = await _supabase.from('fraud_logs').select('id').eq('worker_id', workerId).eq('status', 'pending');
       _fraudsCount = fraudsResponse.length.toString();
+      final fraudsResponse = await _supabase.from('fraud_logs').select('id').eq('worker_id', workerId).eq('status', 'pending');
+      _fraudsCount = fraudsResponse.length.toString();
 
       final activityResponse = await _supabase.from('claims').select().eq('worker_id', workerId).order('created_at', ascending: false).limit(3);
       _recentActivity = List<Map<String, dynamic>>.from(activityResponse);
+      final activityResponse = await _supabase.from('claims').select().eq('worker_id', workerId).order('created_at', ascending: false).limit(3);
+      _recentActivity = List<Map<String, dynamic>>.from(activityResponse);
     } catch (e) {
+      debugPrint('Supabase fetch error: $e');
       debugPrint('Supabase fetch error: $e');
     }
   }
@@ -309,6 +342,125 @@ _potentialPayout = _totalPayoutAccumulated;
           ),
         ],
       ),
+      body: RefreshIndicator(
+        onRefresh: _refreshDashboard,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildSliverAppBar(),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLiveStatusCard(),
+                    const SizedBox(height: 12),
+                    if (_fraudAlert) _buildFraudWarningCard(),
+                    if (_fraudAlert) const SizedBox(height: 12),
+                    _buildPremiumCard(),
+                    const SizedBox(height: 12),
+                    _buildSimulationRow(),
+                    const SizedBox(height: 12),
+                    _buildMetricsGrid(metrics),
+                    const SizedBox(height: 24),
+                    Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
+                    if (_recentActivity.isEmpty)
+                      const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLiveStatusCard() {
+    bool hasAlert = _backendTrigger != null;
+    return Card(
+      elevation: 4,
+      color: hasAlert ? Colors.orange.shade50 : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: hasAlert ? BorderSide(color: Colors.orange.shade300, width: 2) : BorderSide.none,
+      ),
+      child: ListTile(
+        leading: Icon(
+          hasAlert ? Icons.warning_amber_rounded : Icons.cloud_done_rounded,
+          color: hasAlert ? Colors.orange : Colors.green,
+          size: 32,
+        ),
+        title: Text(
+          hasAlert ? 'Alert: $_backendTrigger Detected' : 'Environment: Normal',
+          style: TextStyle(fontWeight: FontWeight.bold, color: hasAlert ? Colors.orange.shade900 : Colors.green.shade900),
+        ),
+        subtitle: Text('Temp: ${_weather['temp'] ?? '--'}°C | Rain: ${_weather['rain'] ?? '0'}mm | Traffic: ${(_traffic * 10).toStringAsFixed(1)}/10'),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('PAYOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text('₹$_potentialPayout', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.indigo, fontSize: 18)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFraudWarningCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.gpp_maybe_rounded, color: Colors.red),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'High Fraud Probability Detected in your RTO patterns. Claims may be flagged for manual review.',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimulationRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              await ValidClaimSimulator.run();
+              _refreshDashboard();
+            },
+            icon: const Icon(Icons.check_circle_outline, size: 18),
+            label: const Text('Valid Claim'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              await FraudClaimSimulator.run();
+              _refreshDashboard();
+            },
+            icon: const Icon(Icons.error_outline, size: 18),
+            label: const Text('Fraud Claim'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+          ),
+        ),
+      ],
     );
   }
 
@@ -440,8 +592,13 @@ _potentialPayout = _totalPayoutAccumulated;
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Hello, $_workerName', 
-                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                    ValueListenableBuilder<String>(
+                      valueListenable: ZUG.userName,
+                      builder: (context, name, _) {
+                        return Text('Hello, $name', 
+                          style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold));
+                      }
+                    ),
                     const SizedBox(height: 4),
                     Text(_hasBoughtPremium ? 'Premium Active for this week' : 'No active premium',
                       style: const TextStyle(color: Colors.white70, fontSize: 14)),
@@ -601,6 +758,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return PersistentBottomBarScaffold(
+      onTabChanged: (index) {
+      },
       items: [
         PersistentTabItem(tab: const DashboardScreen(), icon: Icons.home, title: 'Home', navigatorkey: _tab1navigatorKey),
         PersistentTabItem(tab: const TicketsScreen(), icon: Icons.confirmation_number_rounded, title: 'Tickets', navigatorkey: _tab2navigatorKey),
@@ -612,7 +771,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
 class PersistentBottomBarScaffold extends StatefulWidget {
   final List<PersistentTabItem> items;
-  const PersistentBottomBarScaffold({super.key, required this.items});
+  final Function(int)? onTabChanged;
+  const PersistentBottomBarScaffold({super.key, required this.items, this.onTabChanged});
   @override
   State<PersistentBottomBarScaffold> createState() => _PersistentBottomBarScaffoldState();
 }
@@ -639,7 +799,10 @@ class _PersistentBottomBarScaffoldState extends State<PersistentBottomBarScaffol
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedTab,
           selectedItemColor: Colors.indigo,
-          onTap: (index) => setState(() => _selectedTab = index),
+          onTap: (index) {
+            setState(() => _selectedTab = index);
+            widget.onTabChanged?.call(index);
+          },
           items: widget.items.map((item) => BottomNavigationBarItem(icon: Icon(item.icon), label: item.title)).toList(),
         ),
       ),

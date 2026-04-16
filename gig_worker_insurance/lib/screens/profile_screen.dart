@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../zug_sdk.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -30,13 +31,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadStoredData() async {
     final phone = await _storage.read(key: 'phone_number');
     final eshram = await _storage.read(key: 'plain_eshram_id');
+    final name = await _storage.read(key: 'user_name');
+    final upi = await _storage.read(key: 'user_upi');
     
     if (mounted) {
       setState(() {
         if (phone != null) _phoneNumber = phone;
         if (eshram != null) _eshramId = eshram;
+        if (name != null) {
+          _nameController.text = name;
+          ZUG.userName.value = name;
+        }
+        if (upi != null) _upiController.text = upi;
       });
     }
+  }
+
+  Future<void> _saveName() async {
+    await _storage.write(key: 'user_name', value: _nameController.text);
+    // Update the global notifier so it reflects on Home screen immediately
+    ZUG.userName.value = _nameController.text;
+    setState(() => _isEditingName = false);
+  }
+
+  Future<void> _saveUpi() async {
+    await _storage.write(key: 'user_upi', value: _upiController.text);
+    setState(() => _isEditingUpi = false);
   }
 
   Future<void> _logout() async {
@@ -44,6 +64,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _storage.delete(key: 'worker_id');
     await _storage.delete(key: 'phone_number');
     await _storage.delete(key: 'plain_eshram_id');
+    await _storage.delete(key: 'user_name');
+    await _storage.delete(key: 'user_upi');
+    await _storage.delete(key: 'terms_accepted');
+    
+    ZUG.userName.value = "Rahul"; // Reset for next user
 
     if (mounted) {
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
@@ -79,7 +104,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 controller: _nameController,
                 isEditing: _isEditingName,
                 themeColor: themeColor,
-                onToggle: () => setState(() => _isEditingName = !_isEditingName),
+                onToggle: () {
+                  if (_isEditingName) {
+                    _saveName();
+                  } else {
+                    setState(() => _isEditingName = true);
+                  }
+                },
               ),
               _buildSettingTile(
                 context,
@@ -112,7 +143,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 controller: _upiController,
                 isEditing: _isEditingUpi,
                 themeColor: themeColor,
-                onToggle: () => setState(() => _isEditingUpi = !_isEditingUpi),
+                onToggle: () {
+                  if (_isEditingUpi) {
+                    _saveUpi();
+                  } else {
+                    setState(() => _isEditingUpi = true);
+                  }
+                },
               ),
               _buildSettingTile(
                 context,
@@ -193,9 +230,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                ValueListenableBuilder<String>(
+                  valueListenable: ZUG.userName,
+                  builder: (context, name, _) {
+                    return Text(
+                      name,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    );
+                  }
+                ),
                 Text(
                   'e-Shram ID: $_eshramId',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
                 const SizedBox(height: 4),
                 Text(
