@@ -4,10 +4,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/valid_claim_simulator.dart';
 import '../services/fraud_claim_simulator.dart';
-<<<<<<< HEAD
+import '../services/api_service.dart';
+import '../services/valid_claim_simulator.dart';
+import '../services/fraud_claim_simulator.dart';
 import '../zug_sdk.dart';
-=======
->>>>>>> 15e8268 (ML upgraded+payout normalised)
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
 
@@ -25,12 +25,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   bool _hasBoughtPremium = true;
 
-  // Real-time data metrics from Supabase
+  // Real-time data metrics from Supabase from Supabase
   String _disturbancesCount = '0';
   String _amountPaidCount = '₹0';
   String _claimsCount = '0';
   String _fraudsCount = '0';
   List<Map<String, dynamic>> _recentActivity = [];
+
+  // Data from Python Backend
+  int _calculatedPremium = 150;
+  String? _backendTrigger;
+  Map<String, dynamic> _weather = {};
+  double _traffic = 0.0;
+  bool _fraudAlert = false;
+  int _potentialPayout = 0;
+  int _rtoToday = 0;
+  int _rtoMode = 0;
 
   // Data from Python Backend
   int _calculatedPremium = 150;
@@ -83,9 +93,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       debugPrint('Backend Analysis Error: $e');
     }
+    _refreshDashboard();
+  }
+
+  Future<void> _refreshDashboard() async {
+    setState(() => _isLoading = true);
+    await Future.wait([
+      _fetchRealDashboardData(),
+      _fetchBackendAnalysis(),
+    ]);
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _fetchBackendAnalysis() async {
+    try {
+      final data = await ApiService.predictRisk();
+      if (mounted) {
+        setState(() {
+          // Robust parsing with null-safety
+          _calculatedPremium = (data['premium'] ?? 150) as int;
+          _backendTrigger = data['trigger'];
+          
+          final details = data['details'] ?? {};
+          _weather = details['weather']?['current'] ?? {};
+          
+          final trafficData = details['traffic'] ?? {};
+          _traffic = (trafficData['current'] ?? 0.0).toDouble();
+          
+          _fraudAlert = data['fraud'] ?? false;
+          _potentialPayout = (data['payout'] ?? 0).toInt();
+          
+          final rtoData = details['rto'] ?? {};
+          _rtoToday = (rtoData['today'] ?? 0).toInt();
+          _rtoMode = (rtoData['mode'] ?? 0).toInt();
+        });
+      }
+    } catch (e) {
+      debugPrint('Backend Analysis Error: $e');
+    }
   }
 
   Future<void> _fetchRealDashboardData() async {
+    try {
+      final workerIdStr = await _storage.read(key: 'worker_id');
+      if (workerIdStr == null) return;
+      final int workerId = int.parse(workerIdStr);
+
+      final claimsResponse = await _supabase.from('claims').select('id').eq('worker_id', workerId);
+      _claimsCount = claimsResponse.length.toString();
+      _disturbancesCount = _claimsCount;
     try {
       final workerIdStr = await _storage.read(key: 'worker_id');
       if (workerIdStr == null) return;
@@ -101,13 +157,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         totalPaid += (p['amount'] as num).toDouble();
       }
       _amountPaidCount = '₹${totalPaid.toStringAsFixed(0)}';
+      final payoutsResponse = await _supabase.from('payouts').select('amount').eq('worker_id', workerId).eq('status', 'paid');
+      double totalPaid = 0;
+      for (var p in payoutsResponse) {
+        totalPaid += (p['amount'] as num).toDouble();
+      }
+      _amountPaidCount = '₹${totalPaid.toStringAsFixed(0)}';
 
+      final fraudsResponse = await _supabase.from('fraud_logs').select('id').eq('worker_id', workerId).eq('status', 'pending');
+      _fraudsCount = fraudsResponse.length.toString();
       final fraudsResponse = await _supabase.from('fraud_logs').select('id').eq('worker_id', workerId).eq('status', 'pending');
       _fraudsCount = fraudsResponse.length.toString();
 
       final activityResponse = await _supabase.from('claims').select().eq('worker_id', workerId).order('created_at', ascending: false).limit(3);
       _recentActivity = List<Map<String, dynamic>>.from(activityResponse);
+      final activityResponse = await _supabase.from('claims').select().eq('worker_id', workerId).order('created_at', ascending: false).limit(3);
+      _recentActivity = List<Map<String, dynamic>>.from(activityResponse);
     } catch (e) {
+      debugPrint('Supabase fetch error: $e');
       debugPrint('Supabase fetch error: $e');
     }
   }
@@ -127,7 +194,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xfff5f7fa),
-<<<<<<< HEAD
+      body: CustomScrollView(
+        slivers: [
+          _buildSliverAppBar(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLiveStatusCard(),
+                  const SizedBox(height: 12),
+                  if (_fraudAlert) _buildFraudWarningCard(),
+                  if (_fraudAlert) const SizedBox(height: 12),
+                  _buildPremiumCard(),
+                  const SizedBox(height: 12),
+                  _buildSimulationRow(),
+                  const SizedBox(height: 12),
+                  _buildMetricsGrid(metrics),
+                  const SizedBox(height: 24),
+                  Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
+                  if (_recentActivity.isEmpty)
+                    const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: CustomScrollView(
@@ -158,34 +255,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 40),
                   ],
                 ),
-=======
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLiveStatusCard(),
-                  const SizedBox(height: 12),
-                  if (_fraudAlert) _buildFraudWarningCard(),
-                  if (_fraudAlert) const SizedBox(height: 12),
-                  _buildPremiumCard(),
-                  const SizedBox(height: 12),
-                  _buildSimulationRow(),
-                  const SizedBox(height: 12),
-                  _buildMetricsGrid(metrics),
-                  const SizedBox(height: 24),
-                  Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
-                  if (_recentActivity.isEmpty)
-                    const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
-                  const SizedBox(height: 40),
-                ],
->>>>>>> 15e8268 (ML upgraded+payout normalised)
               ),
             ),
           ],
@@ -248,8 +317,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-<<<<<<< HEAD
-=======
+  Widget _buildSimulationRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              await ValidClaimSimulator.run();
+              _refreshDashboard();
+            },
+            icon: const Icon(Icons.check_circle_outline, size: 18),
+            label: const Text('Valid Claim'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              await FraudClaimSimulator.run();
+              _refreshDashboard();
+            },
+            icon: const Icon(Icons.error_outline, size: 18),
+            label: const Text('Fraud Claim'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLiveStatusCard() {
     bool hasAlert = _backendTrigger != null;
     return Card(
@@ -304,7 +401,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
->>>>>>> 15e8268 (ML upgraded+payout normalised)
   Widget _buildSimulationRow() {
     return Row(
       children: [
