@@ -4,24 +4,9 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7a88caf4-9d6a-4d83-9529-e991aae8b2ff" name="Changes" comment="the T and C">
-      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" afterDir="false" />
+    <list default="true" id="7a88caf4-9d6a-4d83-9529-e991aae8b2ff" name="Changes" comment="Final app">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/android/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/android/app/src/main/AndroidManifest.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/predict.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/predict.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/train_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/train_model.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/main.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/terms_conditions_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/terms_conditions_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/tickets_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/tickets_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/services/telemetry_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/services/telemetry_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/.gitignore" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -52,6 +37,9 @@
     &quot;accountId&quot;: &quot;39505229-590b-4935-9a89-f2e8703e555d&quot;
   }
 }</component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 8
 }</component>
@@ -110,7 +98,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776336894456</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Final app">
+      <option name="closed" value="true" />
+      <created>1776443779039</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1776443779039</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -126,6 +122,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="the T and C" />
-    <option name="LAST_COMMIT_MESSAGE" value="the T and C" />
+    <MESSAGE value="Final app" />
+    <option name="LAST_COMMIT_MESSAGE" value="Final app" />
   </component>
 </project>
