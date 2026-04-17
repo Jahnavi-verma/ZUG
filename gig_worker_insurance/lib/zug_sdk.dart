@@ -25,8 +25,11 @@ class ZUG {
 
   static ZUGConfig? _config;
   
-  /// Global notifier for the user's name to ensure UI consistency across screens.
+  /// Global notifier for the user's name.
   static final ValueNotifier<String> userName = ValueNotifier("Rahul");
+
+  /// Global notifier for premium status.
+  static final ValueNotifier<bool> isPremiumActive = ValueNotifier(false);
 
   /// Initializes the ZUG SDK with the provided configuration.
   static Future<void> initialize(ZUGConfig config) async {
@@ -41,14 +44,24 @@ class ZUG {
     // Inject the Python backend URL into the ApiService
     ApiService.setBaseUrl(config.pythonBackendUrl);
 
-    // Load name from storage if available
     const storage = FlutterSecureStorage();
+    
+    // Load name
     final storedName = await storage.read(key: 'user_name');
     if (storedName != null) {
       userName.value = storedName;
     }
 
-    debugPrint("✅ ZUG SDK: Initialized and Name Loaded: ${userName.value}");
+    // Load premium status
+    final premiumPaidAt = await storage.read(key: 'premium_paid_at');
+    if (premiumPaidAt != null) {
+      final paidAt = DateTime.parse(premiumPaidAt);
+      if (DateTime.now().difference(paidAt).inDays < 7) {
+        isPremiumActive.value = true;
+      }
+    }
+
+    debugPrint("✅ ZUG SDK: Initialized. Name: ${userName.value}, Premium: ${isPremiumActive.value}");
   }
 
   /// Launches the ZUG Insurance UI module.

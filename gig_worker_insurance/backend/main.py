@@ -1,21 +1,15 @@
 # pyre-ignore-all-errors
 import sys
 import os
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
 import razorpay
 from dotenv import load_dotenv
 
-# -------------------------
-# LOAD ENV
-# -------------------------
+# Load Environment Variables
 load_dotenv()
 
-# -------------------------
-# IMPORT YOUR MODULES
-# -------------------------
+# Setup Path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.ml.predict import predict_risk_ml
@@ -24,212 +18,86 @@ from backend.services.weather_service import weather_service
 from backend.services.traffic_service import traffic_service
 from backend.services.rto_service import rto_service
 
-# -------------------------
-# RAZORPAY CLIENT
-# -------------------------
-razorpay_client = razorpay.Client(auth=(
-    os.getenv("RAZORPAY_KEY_ID"),
-    os.getenv("RAZORPAY_KEY_SECRET")
-))
-
-# -------------------------
-# FASTAPI INIT
-# -------------------------
 app = FastAPI()
 
-# -------------------------
-# REQUEST MODELS
-# -------------------------
+# Razorpay Client Initialization
+RAZORPAY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_SdHevaeLdpy7Ym")
+RAZORPAY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+razorpay_client = razorpay.Client(auth=(RAZORPAY_ID, RAZORPAY_SECRET))
+
 class OrderRequest(BaseModel):
     weekly_income: int
     bracket: str
-    premium: int   # ✅ MUST COME FROM FRONTEND
-
+    premium: int
 
 class VerifyRequest(BaseModel):
     order_id: str
     payment_id: str
     signature: str
 
-
-# -------------------------
-# ROOT
-# -------------------------
 @app.get("/")
 def root():
     return {"message": "ZUG AI backend running 🚀"}
 
-
-# -------------------------
-# RISK + PRICING API
-# -------------------------
 @app.post("/predict-risk")
 def predict_risk():
-
-    print("API HIT")
-
-    # -------------------------
-    # INPUT (TEMP)
-    # -------------------------
-    weekly_income = 5000  # replace later with real input
-
-    # -------------------------
-    # FETCH DATA (SAFE)
-    # -------------------------
+    print("API HIT: /predict-risk")
     try:
         weather = weather_service() or {}
-    except:
-        weather = {}
-
-    try:
         traffic = traffic_service() or {}
-    except:
-        traffic = {}
-
-    try:
         rto = rto_service() or {}
-    except:
-        rto = {}
 
-    print("All services fetched")
+        rain = weather.get("current", {}).get("rain", 0)
+        temp = weather.get("current", {}).get("temp", 0)
+        traffic_val = traffic.get("current", 0)
+        rto_val = rto.get("today", 0)
 
-    # -------------------------
-    # FEATURE EXTRACTION (SAFE)
-    # -------------------------
-    rain = weather.get("current", {}).get("rain", 0)
-    temp = weather.get("current", {}).get("temp", 0)
-    traffic_val = traffic.get("current", 0)
-    rto_val = rto.get("today", 0)
+        # Calling ML function directly (No "predict." prefix)
+        try:
+            ml_risk = predict_risk_ml(rain, temp, traffic_val, rto_val)
+        except Exception as e:
+            print(f"ML Prediction Error: {e}")
+            ml_risk = 0.1
 
-    # -------------------------
-    # ML RISK
-    # -------------------------
-    ml_risk = predict.predict_risk_ml(rain, temp, traffic_val, rto_val)
+        rule_risk = 0
+        if rain > 70: rule_risk += 0.3
+        if temp > 45: rule_risk += 0.3
+        if traffic_val > 0.8: rule_risk += 0.2
+        if rto_val > 2: rule_risk += 0.2
 
-    if ml_risk == 0:
-        raise HTTPException(status_code=500, detail="ML prediction failed")
+        final_risk = min(1.0, round((ml_risk * 0.7 + rule_risk * 0.3), 2))
+        pricing = calculate_pricing(final_risk, 5000)
 
-    # Rule-based adjustments
-    rule_risk = 0
-    if rain > 70: rule_risk += 0.3
-    if temp > 45: rule_risk += 0.3
-    if traffic_val > 0.8: rule_risk += 0.2
-    if rto_val > 2: rule_risk += 0.2
+        return {
+            "risk_score": final_risk,
+            "trigger": weather.get("trigger") or traffic.get("trigger") or rto.get("trigger"),
+            "fraud": rto.get("fraud", False),
+            "premium": pricing["premium"],
+            "payout": pricing["payout"],
+            "details": {"weather": weather, "traffic": traffic, "rto": rto}
+        }
+    except Exception as e:
+        print(f"Predict Risk Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # -------------------------
-    # FINAL RISK
-    # -------------------------
-    final_risk = round((ml_risk * 0.7 + rule_risk * 0.3), 2)
-    final_risk = min(final_risk, 1.0)
-
-    # -------------------------
-    # TRIGGER
-    # -------------------------
-    trigger = (
-        weather.get("trigger")
-        or traffic.get("trigger")
-        or rto.get("trigger")
-    )
-
-    # -------------------------
-    # PRICING
-    # -------------------------
-    pricing = calculate_pricing(final_risk, weekly_income)
-
-    # -------------------------
-    # CONFIDENCE
-    # -------------------------
-    confidence = round(1 - abs(ml_risk - rule_risk), 2)
-
-    # -------------------------
-    # FEATURE CONTRIBUTION
-    # -------------------------
-    feature_contribution = {
-        "rain": round(rain / 100, 2),
-        "temp": round(temp / 100, 2),
-        "traffic": round(traffic_val, 2),
-        "rto": round(rto_val / 5, 2)
-    }
-
-    # -------------------------
-    # DETAILS
-    # -------------------------
-    details = {
-        "weather": weather,
-        "traffic": traffic,
-        "rto": rto
-    }
-
-    # -------------------------
-    # EXPLANATION (SAFE)
-    # -------------------------
-    explanation_parts = []
-
-    if (traffic or {}).get("risk", 0) > 0:
-        explanation_parts.append("traffic congestion")
-
-    if (rto or {}).get("risk", 0) > 0:
-        explanation_parts.append("RTO activity")
-
-    if (weather or {}).get("risk", 0) > 0:
-        explanation_parts.append("weather conditions")
-
-    if not explanation_parts:
-        explanation_text = "Low risk due to stable conditions"
-    else:
-        explanation_text = "Risk driven by " + ", ".join(explanation_parts)
-
-    # -------------------------
-    # FINAL RESPONSE
-    # -------------------------
-    return {
-        "risk_score": final_risk,
-        "ml_risk": round(ml_risk, 2),
-        "rule_risk": round(rule_risk, 2),
-        "confidence": confidence,
-
-        "trigger": trigger,
-        "fraud": rto.get("fraud"),
-
-        "premium": pricing["premium"],
-        "payout": pricing["payout"],
-        "expected_loss": pricing["expected_loss"],
-
-        "explainability": feature_contribution,
-        "explanation": explanation_text,
-
-        "details": details
-    }
-
-
-
-# -------------------------
-# CREATE ORDER (FAST ⚡)
-# -------------------------
 @app.post("/create-order")
 def create_order(data: OrderRequest):
+    print(f"API HIT: /create-order for amount {data.premium}")
+    if not RAZORPAY_SECRET:
+        raise HTTPException(status_code=500, detail="RAZORPAY_KEY_SECRET is missing in backend/.env")
     try:
-        # ✅ USE FRONTEND PREMIUM (NO ML HERE)
         amount = int(data.premium * 100)
-
         order = razorpay_client.order.create({
             "amount": amount,
             "currency": "INR",
             "payment_capture": 1
         })
-
-        return {
-            "order_id": order["id"],
-            "amount_paise": amount
-        }
-
+        return {"order_id": order["id"], "amount_paise": amount}
     except Exception as e:
+        print(f"Razorpay Order Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# -------------------------
-# VERIFY PAYMENT
-# -------------------------
 @app.post("/verify-payment")
 def verify_payment(data: VerifyRequest):
     try:
@@ -238,20 +106,10 @@ def verify_payment(data: VerifyRequest):
             'razorpay_payment_id': data.payment_id,
             'razorpay_signature': data.signature
         })
-
-        return {
-            "status": "success",
-            "order_id": data.order_id,
-            "payment_id": data.payment_id
-        }
-
+        return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Verification failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-
-# -------------------------
-# RUN SERVER
-# -------------------------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

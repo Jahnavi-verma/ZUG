@@ -138,21 +138,33 @@ class TelemetryService {
     try {
       final workerIdStr = await _storage.read(key: 'worker_id');
       if (workerIdStr == null) return;
+      final int workerId = int.parse(workerIdStr);
 
       final snapshot = getBufferSnapshot();
 
+      // 1. Upload the raw evidence
       await _supabase.from('claim_evidence').insert({
         'claim_id': claimId,
-        'worker_id': int.parse(workerIdStr),
+        'worker_id': workerId,
         'sensor_snapshot': snapshot,
         'vibration_score': isFraudulent ? 9.8 : 12.5,
         'is_suspicious': isFraudulent,
         'uploaded_at': triggerTime.toIso8601String(),
       });
 
-      // No manual insert to fraud_logs here anymore. 
-      // The backend or DB triggers should handle creating the fraud log 
-      // when is_fraudulent is true in the claims table.
+      // 2. If flagged as fraud, manually insert a log so it shows up in the UI
+      if (isFraudulent) {
+        await _supabase.from('fraud_logs').insert({
+          'worker_id': workerId,
+          'claim_id': claimId,
+          'alert_type': 'Stationary Anomaly (Simulation)',
+          'fraud_score': 0.92,
+          'status': 'pending',
+          'detected_at': triggerTime.toIso8601String(),
+          'manager_notes': 'Automated flag: Static sensor readings during high-risk window.',
+        });
+      }
+
       print("Evidence Sync Complete for claim #$claimId");
     } catch (e) {
       print("Evidence Sync Error: $e");

@@ -7,11 +7,10 @@ const String zugTermsAndConditions = """
 ZUG – Terms & Conditions
 (Micro-Income Support Platform)
 
-Effective Date: [Insert Date]
 
 By clicking “I Agree” and using the ZUG platform (“Platform”), you acknowledge that you have read, understood, and agree to be legally bound by the following Terms & Conditions.
 
----
+
 
 PART A – NATURE OF PLATFORM
 
@@ -24,7 +23,7 @@ ZUG operates solely as a platform and does not function as:
 * A financial institution
 * An investment or deposit-taking entity
 
----
+
 
 2. Explicit Non-Insurance Declaration
    ZUG does NOT provide insurance services.
@@ -37,7 +36,7 @@ ZUG is not regulated by the Insurance Regulatory and Development Authority of In
 
 Use of the Platform does not create any insurer-policyholder relationship.
 
----
+
 
 3. Nature of Contributions
    All payments made by users are voluntary contributions to the Platform.
@@ -50,7 +49,7 @@ Such contributions:
 
 Users acknowledge that contributions are made at their own discretion and do not entitle them to any guaranteed return or payout.
 
----
+
 
 4. Discretionary Support Mechanism
    ZUG may, at its sole discretion, provide financial support to users based on internally defined eligibility conditions.
@@ -63,7 +62,7 @@ Users acknowledge that:
 
 No user has a legally enforceable right to receive support.
 
----
+
 
 5. Maximum Support Cap
    The maximum cumulative financial support that may be provided to any individual user shall not exceed ₹2,00,000 (Rupees Two Lakhs).
@@ -76,7 +75,7 @@ This limit:
 
 This cap is adopted as a conservative threshold aligned with commonly observed limits in micro-benefit financial products, and does not imply that ZUG operates as an insurer.
 
----
+
 
 6. Payments and Processing
    All payments on the Platform are processed through RBI-compliant third-party payment aggregators.
@@ -86,7 +85,7 @@ ZUG:
 * Does not store card or UPI credentials
 * Does not directly process or hold regulated financial instruments
 
----
+
 
 7. No Financial Advice or Product Representation
    ZUG does not offer:
@@ -97,7 +96,6 @@ ZUG:
 
 Nothing on the Platform shall be interpreted as financial advice or a promise of income protection.
 
----
 
 PART B – USER OBLIGATIONS
 
@@ -110,7 +108,7 @@ PART B – USER OBLIGATIONS
 
 ZUG reserves the right to suspend or terminate accounts for violations.
 
----
+
 
 9. Fraud Prevention and Verification
    ZUG reserves the right to:
@@ -119,7 +117,7 @@ ZUG reserves the right to suspend or terminate accounts for violations.
 * Request documentation
 * Reject or reverse support in cases of suspected fraud
 
----
+
 
 PART C – LIMITATION OF LIABILITY
 
@@ -130,7 +128,7 @@ PART C – LIMITATION OF LIABILITY
 * Eligibility for support
 * Continuity of the Platform
 
----
+
 
 11. Limitation of Liability
     To the maximum extent permitted by law, ZUG shall not be liable for:
@@ -139,7 +137,7 @@ PART C – LIMITATION OF LIABILITY
 * Loss of income or opportunity
 * Indirect, incidental, or consequential damages
 
----
+
 
 PART D – DATA AND PRIVACY
 
@@ -151,19 +149,19 @@ By using the Platform, you consent to:
 * Collection of necessary data
 * Use of data for platform operations, fraud prevention, and compliance
 
----
+
 
 PART E – REGULATORY POSITION
 
 13. Intermediary Status
     ZUG operates as an intermediary technology platform and complies with applicable obligations under Indian law.
 
----
+
 
 14. Consumer Protection Compliance
     ZUG maintains a grievance redressal mechanism and complies with applicable consumer protection requirements.
 
----
+
 
 15. Financial Compliance
     ZUG ensures:
@@ -172,7 +170,7 @@ PART E – REGULATORY POSITION
 * No unauthorised financial activity is conducted
 * No deposit-taking behaviour is undertaken
 
----
+
 
 PART F – GRIEVANCE REDRESSAL
 
@@ -182,7 +180,7 @@ PART F – GRIEVANCE REDRESSAL
 * Acknowledgement within 24 hours
 * Resolution within 15 working days
 
----
+
 
 PART G – MODIFICATIONS
 
@@ -191,7 +189,7 @@ PART G – MODIFICATIONS
 
 Continued use of the Platform constitutes acceptance of the revised Terms.
 
----
+
 
 ACCEPTANCE
 
@@ -202,7 +200,7 @@ By clicking “I Agree”, you confirm that:
 * You accept all risks associated with using the Platform
 * You agree to be bound by these Terms & Conditions
 
----
+
 
 ZUG – A Platform for Community-Based Financial Support
 """;

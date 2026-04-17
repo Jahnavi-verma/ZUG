@@ -1,18 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../services/api_service.dart';
-import '../services/valid_claim_simulator.dart';
-import '../services/fraud_claim_simulator.dart';
+import 'package:http/http.dart' as http;
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../services/api_service.dart';
 import '../services/valid_claim_simulator.dart';
 import '../services/fraud_claim_simulator.dart';
 import '../zug_sdk.dart';
 import 'tickets_screen.dart';
 import 'profile_screen.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -27,12 +24,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _storage = const FlutterSecureStorage();
   
   bool _isLoading = true;
-  String _workerName = "Rahul";
   bool _hasBoughtPremium = false;
-
   int _totalPayoutAccumulated = 0;
 
-  // Real-time data metrics from Supabase from Supabase
+  // Real-time data metrics from Supabase
   String _disturbancesCount = '0';
   String _amountPaidCount = '₹0';
   String _claimsCount = '0';
@@ -49,149 +44,111 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _rtoToday = 0;
   int _rtoMode = 0;
 
-  // Data from Python Backend
-  int _calculatedPremium = 150;
-  String? _backendTrigger;
-  Map<String, dynamic> _weather = {};
-  double _traffic = 0.0;
-  bool _fraudAlert = false;
-  int _potentialPayout = 0;
-  int _rtoToday = 0;
-  int _rtoMode = 0;
+  @override
+  void initState() {
+    super.initState();
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+
+    _checkPremiumStatus();
+    _refreshDashboard();
+  }
 
   @override
-void initState() {
-  super.initState();
+  void dispose() {
+    _razorpay.clear();
+    super.dispose();
+  }
 
-  // Razorpay init
-  _razorpay = Razorpay();
-  _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-  _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-  _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+  Future<void> startPayment() async {
+    try {
+      final response = await http.post(
+        Uri.parse("${ApiService.baseUrl}/create-order"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "weekly_income": 5000,
+          "bracket": "B",
+          "premium": _calculatedPremium
+        }),
+      );
 
-  _checkPremiumStatus();
+      if (response.statusCode != 200) {
+        debugPrint("❌ ORDER ERROR: ${response.body}");
+        return;
+      }
 
-  // Your existing logic
-  _refreshDashboard();
-}
+      final data = jsonDecode(response.body);
+      openCheckout(data);
+    } catch (e) {
+      debugPrint("❌ PAYMENT INIT ERROR: $e");
+    }
+  }
 
-Future<void> startPayment() async {
-  try {
-    final response = await http.post(
-      Uri.parse("http://127.0.0.1:8000/create-order"),
+  Future<void> _checkPremiumStatus() async {
+    final value = await _storage.read(key: "premium_paid_at");
+    if (value != null) {
+      final paidAt = DateTime.parse(value);
+      final now = DateTime.now();
+      if (now.difference(paidAt).inDays < 7) {
+        setState(() => _hasBoughtPremium = true);
+        ZUG.isPremiumActive.value = true;
+      } else {
+        await _storage.delete(key: "premium_paid_at");
+        await _storage.delete(key: "total_payout");
+        _totalPayoutAccumulated = 0;
+        setState(() => _hasBoughtPremium = false);
+        ZUG.isPremiumActive.value = false;
+      }
+    }
+
+    final payout = await _storage.read(key: "total_payout");
+    if (payout != null) {
+      setState(() => _totalPayoutAccumulated = int.parse(payout));
+    }
+  }
+
+  void openCheckout(dynamic data) {
+    var options = {
+      'key': 'rzp_test_SdHevaeLdpy7Ym',
+      'amount': data['amount_paise'],
+      'order_id': data['order_id'],
+      'name': 'ZUG',
+      'description': 'Insurance Premium',
+      'prefill': {'contact': '9999999999', 'email': 'test@zug.com'},
+      'theme': {'color': '#3F51B5'}
+    };
+    try {
+      _razorpay.open(options);
+    } catch (e) {
+      debugPrint("❌ RAZORPAY ERROR: $e");
+    }
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    await http.post(
+      Uri.parse("${ApiService.baseUrl}/verify-payment"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "weekly_income": 5000,
-        "bracket": "B",
-        "premium": _calculatedPremium   // ✅ IMPORTANT
+        "order_id": response.orderId,
+        "payment_id": response.paymentId,
+        "signature": response.signature
       }),
     );
 
-    if (response.statusCode != 200) {
-      print("❌ ORDER ERROR: ${response.body}");
-      return;
-    }
-
-    final data = jsonDecode(response.body);
-    print("✅ ORDER CREATED: $data");
-
-    openCheckout(data);
-
-  } catch (e) {
-    print("❌ PAYMENT INIT ERROR: $e");
-  }
-}
-
-Future<void> _checkPremiumStatus() async {
-  final value = await _storage.read(key: "premium_paid_at");
-
-  if (value != null) {
-    final paidAt = DateTime.parse(value);
-    final now = DateTime.now();
-
-    if (now.difference(paidAt).inDays < 7) {
-      setState(() {
-        _hasBoughtPremium = true;
-      });
-    } else {
-      await _storage.delete(key: "premium_paid_at");
-      await _storage.delete(key: "total_payout"); // ✅ ADD
-      _totalPayoutAccumulated = 0;                // ✅ ADD
-
-      setState(() {
-        _hasBoughtPremium = false;
-      });
-    }
+    setState(() => _hasBoughtPremium = true);
+    ZUG.isPremiumActive.value = true;
+    await _storage.write(key: "premium_paid_at", value: DateTime.now().toIso8601String());
   }
 
-  // ✅ LOAD PAYOUT
-  final payout = await _storage.read(key: "total_payout");
-  if (payout != null) {
-    _totalPayoutAccumulated = int.parse(payout);
+  void _handlePaymentError(PaymentFailureResponse response) {
+    debugPrint("❌ PAYMENT FAILED: ${response.message}");
   }
-}
 
-void openCheckout(dynamic data) {
-  var options = {
-    'key': 'rzp_test_SdHevaeLdpy7Ym',   // ✅ your test key
-    'amount': data['amount_paise'],
-    'order_id': data['order_id'],
-    'name': 'ZUG',
-    'description': 'Insurance Payment',
-
-    'prefill': {
-      'contact': '9999999999',
-      'email': 'test@zug.com'
-    },
-
-    'theme': {
-      'color': '#3F51B5'
-    }
-  };
-
-  try {
-    _razorpay.open(options);
-  } catch (e) {
-    print("❌ RAZORPAY ERROR: $e");
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    debugPrint("Wallet: ${response.walletName}");
   }
-}
-
-
-void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-  print("SUCCESS ORDER: ${response.orderId}");
-  print("SUCCESS PAYMENT: ${response.paymentId}");
-  print("SIGNATURE: ${response.signature}");
-
-   await http.post(
-  Uri.parse("http://127.0.0.1:8000/verify-payment"),
-  headers: {"Content-Type": "application/json"},
-  body: jsonEncode({
-    "order_id": response.orderId,
-    "payment_id": response.paymentId,
-    "signature": response.signature
-  }),
-);
-
-setState(() {
-  _hasBoughtPremium = true;
-});
-
-await _storage.write(
-  key: "premium_paid_at",
-  value: DateTime.now().toIso8601String(),
-);
-
-} // ✅ ADD THIS LINE
-
-void _handlePaymentError(PaymentFailureResponse response) {
-  print("❌ PAYMENT FAILED: ${response.message}");
-}
-
-
-void _handleExternalWallet(ExternalWalletResponse response) {
-  print("Wallet: ${response.walletName}");
-}
-
 
   Future<void> _refreshDashboard() async {
     setState(() => _isLoading = true);
@@ -207,39 +164,24 @@ void _handleExternalWallet(ExternalWalletResponse response) {
       final data = await ApiService.predictRisk();
       if (mounted) {
         setState(() {
-          // Robust parsing with null-safety
-          _calculatedPremium = (data['premium'] ?? 150) as int;
+          _calculatedPremium = (data['premium'] ?? 150).toInt();
           _backendTrigger = data['trigger'];
-          
           final details = data['details'] ?? {};
           _weather = details['weather']?['current'] ?? {};
-          
           final trafficData = details['traffic'] ?? {};
           _traffic = (trafficData['current'] ?? 0.0).toDouble();
-          
           _fraudAlert = data['fraud'] ?? false;
-         
-         final newPayout = (data['payout'] ?? 0).toInt();
-
-final maxLimit = _calculatedPremium * 2;
-
-if (_hasBoughtPremium && _totalPayoutAccumulated < maxLimit) {
-  _totalPayoutAccumulated += newPayout;
-
-  if (_totalPayoutAccumulated > maxLimit) {
-    _totalPayoutAccumulated = maxLimit;
-  }
-
-  // save payout
-  await _storage.write(
-    key: "total_payout",
-    value: _totalPayoutAccumulated.toString(),
-  );
-}
-
-// display accumulated payout
-_potentialPayout = _totalPayoutAccumulated;
           
+          final int newPayout = (data['payout'] ?? 0).toInt();
+          final int maxLimit = _calculatedPremium * 2;
+
+          if (_hasBoughtPremium && _totalPayoutAccumulated < maxLimit) {
+            _totalPayoutAccumulated = _totalPayoutAccumulated + newPayout;
+            if (_totalPayoutAccumulated > maxLimit) _totalPayoutAccumulated = maxLimit;
+            _storage.write(key: "total_payout", value: _totalPayoutAccumulated.toString());
+          }
+          _potentialPayout = _totalPayoutAccumulated;
+
           final rtoData = details['rto'] ?? {};
           _rtoToday = (rtoData['today'] ?? 0).toInt();
           _rtoMode = (rtoData['mode'] ?? 0).toInt();
@@ -259,21 +201,7 @@ _potentialPayout = _totalPayoutAccumulated;
       final claimsResponse = await _supabase.from('claims').select('id').eq('worker_id', workerId);
       _claimsCount = claimsResponse.length.toString();
       _disturbancesCount = _claimsCount;
-    try {
-      final workerIdStr = await _storage.read(key: 'worker_id');
-      if (workerIdStr == null) return;
-      final int workerId = int.parse(workerIdStr);
 
-      final claimsResponse = await _supabase.from('claims').select('id').eq('worker_id', workerId);
-      _claimsCount = claimsResponse.length.toString();
-      _disturbancesCount = _claimsCount;
-
-      final payoutsResponse = await _supabase.from('payouts').select('amount').eq('worker_id', workerId).eq('status', 'paid');
-      double totalPaid = 0;
-      for (var p in payoutsResponse) {
-        totalPaid += (p['amount'] as num).toDouble();
-      }
-      _amountPaidCount = '₹${totalPaid.toStringAsFixed(0)}';
       final payoutsResponse = await _supabase.from('payouts').select('amount').eq('worker_id', workerId).eq('status', 'paid');
       double totalPaid = 0;
       for (var p in payoutsResponse) {
@@ -283,15 +211,10 @@ _potentialPayout = _totalPayoutAccumulated;
 
       final fraudsResponse = await _supabase.from('fraud_logs').select('id').eq('worker_id', workerId).eq('status', 'pending');
       _fraudsCount = fraudsResponse.length.toString();
-      final fraudsResponse = await _supabase.from('fraud_logs').select('id').eq('worker_id', workerId).eq('status', 'pending');
-      _fraudsCount = fraudsResponse.length.toString();
 
-      final activityResponse = await _supabase.from('claims').select().eq('worker_id', workerId).order('created_at', ascending: false).limit(3);
-      _recentActivity = List<Map<String, dynamic>>.from(activityResponse);
       final activityResponse = await _supabase.from('claims').select().eq('worker_id', workerId).order('created_at', ascending: false).limit(3);
       _recentActivity = List<Map<String, dynamic>>.from(activityResponse);
     } catch (e) {
-      debugPrint('Supabase fetch error: $e');
       debugPrint('Supabase fetch error: $e');
     }
   }
@@ -311,37 +234,6 @@ _potentialPayout = _totalPayoutAccumulated;
 
     return Scaffold(
       backgroundColor: const Color(0xfff5f7fa),
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildLiveStatusCard(),
-                  const SizedBox(height: 12),
-                  if (_fraudAlert) _buildFraudWarningCard(),
-                  if (_fraudAlert) const SizedBox(height: 12),
-                  _buildPremiumCard(),
-                  const SizedBox(height: 12),
-                  _buildSimulationRow(),
-                  const SizedBox(height: 12),
-                  _buildMetricsGrid(metrics),
-                  const SizedBox(height: 24),
-                  Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),
-                  if (_recentActivity.isEmpty)
-                    const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),
-                  const SizedBox(height: 40),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         onRefresh: _refreshDashboard,
         child: CustomScrollView(
@@ -402,9 +294,11 @@ _potentialPayout = _totalPayoutAccumulated;
         subtitle: Text('Temp: ${_weather['temp'] ?? '--'}°C | Rain: ${_weather['rain'] ?? '0'}mm | Traffic: ${(_traffic * 10).toStringAsFixed(1)}/10'),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             const Text('PAYOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-            Text('₹$_potentialPayout', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.indigo, fontSize: 18)),
+            Text('₹$_totalPayoutAccumulated', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.indigo, fontSize: 18)),
+            Text('/ ₹${_calculatedPremium * 2}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
           ],
         ),
       ),
@@ -419,115 +313,11 @@ _potentialPayout = _totalPayoutAccumulated;
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.red.shade200),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.gpp_maybe_rounded, color: Colors.red),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'High Fraud Probability Detected in your RTO patterns. Claims may be flagged for manual review.',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSimulationRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () async {
-              await ValidClaimSimulator.run();
-              _refreshDashboard();
-            },
-            icon: const Icon(Icons.check_circle_outline, size: 18),
-            label: const Text('Valid Claim'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () async {
-              await FraudClaimSimulator.run();
-              _refreshDashboard();
-            },
-            icon: const Icon(Icons.error_outline, size: 18),
-            label: const Text('Fraud Claim'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLiveStatusCard() {
-    bool hasAlert = _backendTrigger != null;
-    return Card(
-      elevation: 4,
-      color: hasAlert ? Colors.orange.shade50 : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: hasAlert ? BorderSide(color: Colors.orange.shade300, width: 2) : BorderSide.none,
-      ),
-      child: ListTile(
-        leading: Icon(
-          hasAlert ? Icons.warning_amber_rounded : Icons.cloud_done_rounded,
-          color: hasAlert ? Colors.orange : Colors.green,
-          size: 32,
-        ),
-        title: Text(
-          hasAlert ? 'Alert: $_backendTrigger Detected' : 'Environment: Normal',
-          style: TextStyle(fontWeight: FontWeight.bold, color: hasAlert ? Colors.orange.shade900 : Colors.green.shade900),
-        ),
-        subtitle: Text('Temp: ${_weather['temp'] ?? '--'}°C | Rain: ${_weather['rain'] ?? '0'}mm | Traffic: ${(_traffic * 10).toStringAsFixed(1)}/10'),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('PAYOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-            Column(
-  crossAxisAlignment: CrossAxisAlignment.end,
-  children: [
-    Text(
-      '₹$_totalPayoutAccumulated',
-      style: const TextStyle(
-        fontWeight: FontWeight.w900,
-        color: Colors.indigo,
-        fontSize: 18,
-      ),
-    ),
-    Text(
-      '/ ₹${_calculatedPremium * 2}',
-      style: const TextStyle(fontSize: 10, color: Colors.grey),
-    ),
-    if (_totalPayoutAccumulated >= _calculatedPremium * 2)
-      const Text(
-        "⚠ Max limit reached",
-        style: TextStyle(color: Colors.red, fontSize: 10),
-      ),
-  ],
-)
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFraudWarningCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.gpp_maybe_rounded, color: Colors.red),
-          const SizedBox(width: 12),
-          const Expanded(
+          Icon(Icons.gpp_maybe_rounded, color: Colors.red),
+          SizedBox(width: 12),
+          Expanded(
             child: Text(
               'High Fraud Probability Detected in your RTO patterns. Claims may be flagged for manual review.',
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
@@ -600,8 +390,13 @@ _potentialPayout = _totalPayoutAccumulated;
                       }
                     ),
                     const SizedBox(height: 4),
-                    Text(_hasBoughtPremium ? 'Premium Active for this week' : 'No active premium',
-                      style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: ZUG.isPremiumActive,
+                      builder: (context, isActive, _) {
+                        return Text(isActive ? 'Premium Active for this week' : 'No active premium',
+                          style: const TextStyle(color: Colors.white70, fontSize: 14));
+                      }
+                    ),
                   ],
                 ),
                 const CircleAvatar(radius: 28, backgroundColor: Colors.white24, child: Icon(Icons.person, size: 35, color: Colors.white)),
@@ -614,73 +409,51 @@ _potentialPayout = _totalPayoutAccumulated;
   }
 
   Widget _buildPremiumCard() {
-  return Card(
-    elevation: 2,
-    margin: EdgeInsets.zero,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          const Icon(Icons.stars_rounded, color: Colors.indigo, size: 32),
-          const SizedBox(width: 16),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const Icon(Icons.stars_rounded, color: Colors.indigo, size: 32),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Next week premium price:', 
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo)),
+                  Text('RTO Benchmarking: $_rtoToday (vs avg $_rtoMode)', 
+                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text(
-                  'Next week premium price:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Colors.indigo,
-                  ),
-                ),
-                Text(
-                  'RTO Benchmarking: $_rtoToday (vs avg $_rtoMode)',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                ),
+                Text('₹$_calculatedPremium', 
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.indigo)),
+                const SizedBox(height: 8),
+                _hasBoughtPremium
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(8)),
+                      child: const Text("✅ Paid", style: TextStyle(color: Colors.white, fontSize: 12)),
+                    )
+                  : ElevatedButton(
+                      onPressed: startPayment,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16)),
+                      child: const Text("Pay"),
+                    )
               ],
             ),
-          ),
-
-          // 👉 RIGHT SIDE (price + button)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '₹$_calculatedPremium',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 20,
-                  color: Colors.indigo,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _hasBoughtPremium
-  ? Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.green,
-        borderRadius: BorderRadius.circular(8),
+          ],
+        ),
       ),
-      child: Text(
-        "✅ Paid",
-        style: TextStyle(color: Colors.white),
-      ),
-    )
-  : ElevatedButton(
-      onPressed: startPayment,
-      child: Text("Pay"),
-    )
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildMetricsGrid(List<Map<String, dynamic>> metrics) {
     return GridView.count(
@@ -703,10 +476,8 @@ _potentialPayout = _totalPayoutAccumulated;
             children: [
               Icon(m['icon'] as IconData, color: Colors.indigo, size: 24),
               const SizedBox(height: 4),
-              Text(m['value'] as String,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Text(m['label'] as String,
-                  style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(m['value'] as String, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(m['label'] as String, style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
@@ -730,19 +501,16 @@ _potentialPayout = _totalPayoutAccumulated;
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: isPaid ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+            color: isPaid ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(isPaid ? 'PAID' : 'PENDING', 
-            style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
+          child: Text(isPaid ? 'PAID' : 'PENDING', style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
         ),
       ),
     );
   }
 }
 
-
-// Main Navigation & Persistance (Refactored for correctness)
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
   @override
@@ -750,7 +518,6 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _selectedTab = 0;
   final _tab1navigatorKey = GlobalKey<NavigatorState>();
   final _tab2navigatorKey = GlobalKey<NavigatorState>();
   final _tab3navigatorKey = GlobalKey<NavigatorState>();
@@ -758,8 +525,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return PersistentBottomBarScaffold(
-      onTabChanged: (index) {
-      },
       items: [
         PersistentTabItem(tab: const DashboardScreen(), icon: Icons.home, title: 'Home', navigatorkey: _tab1navigatorKey),
         PersistentTabItem(tab: const TicketsScreen(), icon: Icons.confirmation_number_rounded, title: 'Tickets', navigatorkey: _tab2navigatorKey),

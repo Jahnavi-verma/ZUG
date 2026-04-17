@@ -4,20 +4,23 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7a88caf4-9d6a-4d83-9529-e991aae8b2ff" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/libraries/Dart_SDK.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/studiobot.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/terms_conditions_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="7a88caf4-9d6a-4d83-9529-e991aae8b2ff" name="Changes" comment="the T and C">
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/android/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/android/app/src/main/AndroidManifest.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/predict.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/predict.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/train_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/train_model.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/main.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/terms_conditions_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/terms_conditions_screen.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/tickets_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/tickets_screen.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/services/telemetry_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/services/telemetry_service.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -29,6 +32,12 @@
     <option name="formatViaClangd" value="false" />
   </component>
   <component name="Git.Settings">
+    <option name="PUSH_TAGS">
+      <GitPushTagMode>
+        <option name="argument" value="--tags" />
+        <option name="title" value="All" />
+      </GitPushTagMode>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
@@ -75,6 +84,7 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/gig_worker_insurance/backend" />
       <recent name="$PROJECT_DIR$/gig_worker_insurance" />
     </key>
   </component>
@@ -92,6 +102,30 @@
       <option name="presentableId" value="Default" />
       <updated>1776090035354</updated>
     </task>
+    <task id="LOCAL-00001" summary="the T and C">
+      <option name="closed" value="true" />
+      <created>1776336894456</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1776336894456</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="the T and C" />
+    <option name="LAST_COMMIT_MESSAGE" value="the T and C" />
   </component>
 </project>

@@ -46,7 +46,6 @@ class _LoginScreenState extends State<LoginScreen> {
           .maybeSingle();
 
       if (existingWorker != null) {
-        // Save worker session info
         await _storage.write(key: 'worker_id', value: existingWorker['id'].toString());
         await _storage.write(key: 'plain_eshram_id', value: plainId);
 
@@ -61,18 +60,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
             if (didAuthenticate) {
               TelemetryService().startTracking();
-              setState(() => _isLoading = false);
               
-              // Check if terms are already accepted
               bool termsAccepted = existingWorker['terms_accepted'] == true;
               if (!termsAccepted) {
-                // Double check local storage
                 final localTerms = await _storage.read(key: 'terms_accepted');
                 termsAccepted = localTerms == 'true';
               }
 
-              _proceed(termsAccepted: termsAccepted);
-              return;
+              if (mounted) {
+                setState(() => _isLoading = false);
+                _proceed(termsAccepted: termsAccepted);
+                return;
+              }
             }
           }
         }
@@ -81,106 +80,138 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('Supabase select error: $e');
     }
 
-    setState(() {
-      _isLoading = false;
-      _currentStep = 2;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _currentStep = 2;
+      });
+    }
   }
 
   Future<void> _sendOtp() async {
-    if (_phoneController.text.isEmpty) return;
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) return;
+    
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    setState(() {
-      _isLoading = false;
-      _currentStep = 3;
-    });
+    try {
+      await _supabase.auth.signInWithOtp(phone: phone);
+      if (mounted) {
+        setState(() {
+          _currentStep = 3;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error sending OTP: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to send OTP. Use E.164 format (+91...)')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _verifyOtp() async {
-    if (_otpController.text == '123456') {
-      setState(() => _isLoading = true);
+    final otp = _otpController.text.trim();
+    final phone = _phoneController.text.trim();
+    if (otp.isEmpty) return;
 
-      // 1. Permission for device ID
-      bool? allowAccess = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Permission Required'),
-          content: const Text('Allow this app to access your persistent device ID for secure authentication?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Deny')),
-            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
-          ],
-        ),
+    setState(() => _isLoading = true);
+    try {
+      final response = await _supabase.auth.verifyOTP(
+        phone: phone,
+        token: otp,
+        type: OtpType.sms,
       );
 
-      if (allowAccess != true) {
-        setState(() => _isLoading = false);
-        return;
+      if (response.session != null) {
+        await _onOtpSuccess();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP')));
+        }
       }
+    } catch (e) {
+      debugPrint('OTP Verification Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
-      // 2. Biometric check
+  Future<void> _onOtpSuccess() async {
+    bool? allowAccess = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permission Required'),
+        content: const Text('Allow this app to access your persistent device ID?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Deny')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
+        ],
+      ),
+    );
+
+    if (allowAccess != true) return;
+
+    try {
+      final bool didAuthenticate = await _auth.authenticate(
+        localizedReason: 'Verify biometrics to link account',
+        options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+      );
+      if (!didAuthenticate) return;
+    } catch (e) {
+      debugPrint('Biometric error: $e');
+      return;
+    }
+
+    try {
+      String deviceId;
       try {
-        final bool didAuthenticate = await _auth.authenticate(
-          localizedReason: 'Verify fingerprint to link your account to this device',
-          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
-        );
-
-        if (!didAuthenticate) {
-          setState(() => _isLoading = false);
-          return;
-        }
+        deviceId = await PersistentDeviceId.getDeviceId() ?? 'unknown_id';
       } catch (e) {
-        debugPrint('Biometric error: $e');
-        setState(() => _isLoading = false);
-        return;
+        deviceId = 'unknown_hw_id';
       }
 
-      try {
-        String? deviceId;
-        try {
-          deviceId = await PersistentDeviceId.getDeviceId();
-        } catch (e) {
-          deviceId = 'unknown_hw_id';
-        }
+      final response = await _supabase.from('workers').upsert({
+        'eshram_hash': _hashedId,
+        'device_id': deviceId,
+        'last_biometric_at': DateTime.now().toIso8601String(),
+        'is_trusted': true,
+      }, onConflict: 'eshram_hash').select().single();
 
-        final response = await _supabase.from('workers').upsert({
-          'eshram_hash': _hashedId,
-          'device_id': deviceId,
-          'last_biometric_at': DateTime.now().toIso8601String(),
-          'is_trusted': true,
-        }, onConflict: 'eshram_hash').select().single();
+      await _storage.write(key: 'worker_id', value: response['id'].toString());
+      await _storage.write(key: 'plain_eshram_id', value: _eshramController.text);
+      await _storage.write(key: 'phone_number', value: _phoneController.text);
+      await _storage.write(key: 'last_sms_date', value: DateTime.now().toIso8601String());
 
-        await _storage.write(key: 'worker_id', value: response['id'].toString());
-        await _storage.write(key: 'plain_eshram_id', value: _eshramController.text);
-        await _storage.write(key: 'phone_number', value: _phoneController.text);
-        await _storage.write(key: 'last_sms_date', value: DateTime.now().toIso8601String());
+      TelemetryService().startTracking();
 
-        TelemetryService().startTracking();
-
-        bool termsAccepted = response['terms_accepted'] == true;
-        if (!termsAccepted) {
-          final localTerms = await _storage.read(key: 'terms_accepted');
-          termsAccepted = localTerms == 'true';
-        }
-
-        _proceed(termsAccepted: termsAccepted);
-      } catch (e) {
-        debugPrint('Sync failed: $e');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-      } finally {
-        setState(() => _isLoading = false);
+      bool termsAccepted = response['terms_accepted'] == true;
+      if (!termsAccepted) {
+        final localTerms = await _storage.read(key: 'terms_accepted');
+        termsAccepted = localTerms == 'true';
       }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP')));
+
+      _proceed(termsAccepted: termsAccepted);
+    } catch (e) {
+      debugPrint('Sync failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync error: $e')));
+      }
     }
   }
 
   void _proceed({required bool termsAccepted}) {
-    if (termsAccepted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainNavigationScreen()));
-    } else {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TermsConditionsScreen()));
+    if (mounted) {
+      if (termsAccepted) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainNavigationScreen()));
+      } else {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TermsConditionsScreen()));
+      }
     }
   }
 
@@ -188,7 +219,11 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xfff5f7fa),
-      appBar: AppBar(title: Text(_currentStep == 1 ? 'e-Shram Login' : 'Verification'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: Text(_currentStep == 1 ? 'e-Shram Login' : 'Verification'),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -213,9 +248,24 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 32),
         const Text('Step 1: e-Shram Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 24),
-        TextField(controller: _eshramController, decoration: InputDecoration(labelText: 'e-Shram ID', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number),
+        TextField(
+          controller: _eshramController, 
+          decoration: InputDecoration(labelText: 'e-Shram ID', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), 
+          keyboardType: TextInputType.number,
+        ),
         const SizedBox(height: 24),
-        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _handleEShramSubmit, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Continue')),
+        _isLoading 
+          ? const CircularProgressIndicator() 
+          : ElevatedButton(
+              onPressed: _handleEShramSubmit, 
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo, 
+                foregroundColor: Colors.white, 
+                minimumSize: const Size(double.infinity, 56), 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ), 
+              child: const Text('Continue'),
+            ),
       ],
     );
   }
@@ -227,9 +277,28 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 32),
         const Text('Step 2: SMS Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 24),
-        TextField(controller: _phoneController, decoration: InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.phone),
+        TextField(
+          controller: _phoneController, 
+          decoration: InputDecoration(
+            labelText: 'Phone Number (+91...)', 
+            hintText: '+919876543210',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+          ), 
+          keyboardType: TextInputType.phone,
+        ),
         const SizedBox(height: 24),
-        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _sendOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Send OTP')),
+        _isLoading 
+          ? const CircularProgressIndicator() 
+          : ElevatedButton(
+              onPressed: _sendOtp, 
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo, 
+                foregroundColor: Colors.white, 
+                minimumSize: const Size(double.infinity, 56), 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ), 
+              child: const Text('Send OTP'),
+            ),
       ],
     );
   }
@@ -241,9 +310,25 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 32),
         const Text('Enter 6-digit OTP', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 24),
-        TextField(controller: _otpController, decoration: InputDecoration(labelText: 'OTP (use 123456)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number, maxLength: 6),
+        TextField(
+          controller: _otpController, 
+          decoration: InputDecoration(labelText: 'OTP', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), 
+          keyboardType: TextInputType.number, 
+          maxLength: 6,
+        ),
         const SizedBox(height: 24),
-        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _verifyOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Verify & Login')),
+        _isLoading 
+          ? const CircularProgressIndicator() 
+          : ElevatedButton(
+              onPressed: _verifyOtp, 
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo, 
+                foregroundColor: Colors.white, 
+                minimumSize: const Size(double.infinity, 56), 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ), 
+              child: const Text('Verify & Login'),
+            ),
       ],
     );
   }

@@ -18,6 +18,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   
   bool _isEditingName = false;
   bool _isEditingUpi = false;
+  bool _hasBoughtPremium = false;
   
   String _phoneNumber = '+91 98765 43210';
   String _eshramId = '1234 5678 9012';
@@ -34,8 +35,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final name = await _storage.read(key: 'user_name');
     final upi = await _storage.read(key: 'user_upi');
     
+    // Check premium status from storage
+    final premiumPaidAt = await _storage.read(key: 'premium_paid_at');
+    bool isPremiumActive = false;
+    if (premiumPaidAt != null) {
+      final paidAt = DateTime.parse(premiumPaidAt);
+      if (DateTime.now().difference(paidAt).inDays < 7) {
+        isPremiumActive = true;
+      }
+    }
+    
     if (mounted) {
       setState(() {
+        _hasBoughtPremium = isPremiumActive;
         if (phone != null) _phoneNumber = phone;
         if (eshram != null) _eshramId = eshram;
         if (name != null) {
@@ -67,6 +79,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _storage.delete(key: 'user_name');
     await _storage.delete(key: 'user_upi');
     await _storage.delete(key: 'terms_accepted');
+    await _storage.delete(key: 'premium_paid_at');
     
     ZUG.userName.value = "Rahul"; // Reset for next user
 
@@ -171,12 +184,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 context,
                 icon: Icons.workspace_premium,
                 title: 'Premium Plan',
-                subtitle: 'Premium active for this week',
+                subtitle: _hasBoughtPremium ? 'Premium active for this week' : 'No active premium',
                 isDark: isDark,
                 themeColor: themeColor,
-                trailing: const Text(
-                  'Active',
-                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                trailing: Text(
+                  _hasBoughtPremium ? 'Active' : 'Inactive',
+                  style: TextStyle(
+                    color: _hasBoughtPremium ? Colors.green : Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 onTap: () {},
               ),
@@ -245,10 +261,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Premium active for this week',
+                  _hasBoughtPremium ? 'Premium active for this week' : 'No active premium',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.green.shade700,
+                    color: _hasBoughtPremium ? Colors.green.shade700 : Colors.grey,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -301,7 +317,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: themeColor.withValues(alpha: 0.1),
+          color: themeColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: themeColor),
@@ -339,7 +355,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: (textColor ?? themeColor).withValues(alpha: 0.1),
+          color: (textColor ?? themeColor).withOpacity(0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: textColor ?? themeColor),
