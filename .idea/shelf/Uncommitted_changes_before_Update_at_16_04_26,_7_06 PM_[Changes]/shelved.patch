@@ -1,0 +1,555 @@
+Index: gig_worker_insurance/backend/ml/train_model.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import pandas as pd\nimport pickle\n\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.preprocessing import StandardScaler\nfrom sklearn.ensemble import RandomForestRegressor\nfrom sklearn.metrics import mean_squared_error\nfrom backend.services.weather_service import weather_service\n# -------------------------\n# LOAD DATA\n# -------------------------\ndata = pd.read_csv(\"backend/data/risk_data.csv\")\n\nX = data[[\"rain\", \"temp\", \"traffic\", \"rto\"]]\ny = data[\"risk\"]\n\n# get live weather\nweather = weather_service()\n\nrain = weather[\"current\"][\"rain\"]\ntemp = weather[\"current\"][\"temp\"]\n\n# simulate realistic combinations\nnew_row = {\n    \"rain\": rain,\n    \"temp\": temp,\n    \"traffic\": 0.6,   # assume avg\n    \"rto\": 3,\n    \"risk\": min(1, (rain/80) + (temp/50) * 0.3)\n}\n\ndata = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)\n\n# -------------------------\n# TRAIN-TEST SPLIT\n# -------------------------\nX_train, X_test, y_train, y_test = train_test_split(\n    X, y, test_size=0.2, random_state=42\n)\n\n# -------------------------\n# SCALING\n# -------------------------\nscaler = StandardScaler()\nX_train = scaler.fit_transform(X_train)\nX_test = scaler.transform(X_test)\n\n# -------------------------\n# MODEL\n# -------------------------\nmodel = RandomForestRegressor(\n    n_estimators=100,\n    max_depth=5,\n    random_state=42\n)\n\nmodel.fit(X_train, y_train)\n\n# -------------------------\n# EVALUATION\n# -------------------------\npreds = model.predict(X_test)\nmse = mean_squared_error(y_test, preds)\n\nprint(\"MSE:\", mse)\n\n# -------------------------\n# FEATURE IMPORTANCE\n# -------------------------\nprint(\"\\nFeature Importance:\")\nfor feature, imp in zip([\"rain\", \"temp\", \"traffic\", \"rto\"], model.feature_importances_):\n    print(f\"{feature}: {round(imp, 3)}\")\n\n# -------------------------\n# SAVE MODEL\n# -------------------------\nwith open(\"backend/ml/model.pkl\", \"wb\") as f:\n    pickle.dump((model, scaler), f)\n\nprint(\"\\nRandom Forest model trained ✅\")
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gig_worker_insurance/backend/ml/train_model.py b/gig_worker_insurance/backend/ml/train_model.py
+--- a/gig_worker_insurance/backend/ml/train_model.py	(revision 017fced2477b092bcedb6210f13209c560aac768)
++++ b/gig_worker_insurance/backend/ml/train_model.py	(date 1776343332950)
+@@ -1,3 +1,4 @@
++import os
+ import pandas as pd
+ import pickle
+ 
+@@ -5,32 +6,18 @@
+ from sklearn.preprocessing import StandardScaler
+ from sklearn.ensemble import RandomForestRegressor
+ from sklearn.metrics import mean_squared_error
+-from backend.services.weather_service import weather_service
++
+ # -------------------------
+ # LOAD DATA
+ # -------------------------
+-data = pd.read_csv("backend/data/risk_data.csv")
++# Ensure we load from the correct path relative to the project root
++BASE_DIR = os.path.dirname(os.path.abspath(__file__))
++DATA_PATH = os.path.join(os.path.dirname(BASE_DIR), "data", "risk_data.csv")
++data = pd.read_csv(DATA_PATH)
+ 
+ X = data[["rain", "temp", "traffic", "rto"]]
+ y = data["risk"]
+ 
+-# get live weather
+-weather = weather_service()
+-
+-rain = weather["current"]["rain"]
+-temp = weather["current"]["temp"]
+-
+-# simulate realistic combinations
+-new_row = {
+-    "rain": rain,
+-    "temp": temp,
+-    "traffic": 0.6,   # assume avg
+-    "rto": 3,
+-    "risk": min(1, (rain/80) + (temp/50) * 0.3)
+-}
+-
+-data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+-
+ # -------------------------
+ # TRAIN-TEST SPLIT
+ # -------------------------
+@@ -42,8 +29,8 @@
+ # SCALING
+ # -------------------------
+ scaler = StandardScaler()
+-X_train = scaler.fit_transform(X_train)
+-X_test = scaler.transform(X_test)
++X_train_scaled = scaler.fit_transform(X_train)
++X_test_scaled = scaler.transform(X_test)
+ 
+ # -------------------------
+ # MODEL
+@@ -54,27 +41,22 @@
+     random_state=42
+ )
+ 
+-model.fit(X_train, y_train)
++model.fit(X_train_scaled, y_train)
+ 
+ # -------------------------
+ # EVALUATION
+ # -------------------------
+-preds = model.predict(X_test)
++preds = model.predict(X_test_scaled)
+ mse = mean_squared_error(y_test, preds)
+ 
+ print("MSE:", mse)
+ 
+-# -------------------------
+-# FEATURE IMPORTANCE
+-# -------------------------
+-print("\nFeature Importance:")
+-for feature, imp in zip(["rain", "temp", "traffic", "rto"], model.feature_importances_):
+-    print(f"{feature}: {round(imp, 3)}")
+-
+ # -------------------------
+ # SAVE MODEL
+ # -------------------------
+-with open("backend/ml/model.pkl", "wb") as f:
++# Save exactly as a (model, scaler) tuple
++MODEL_SAVE_PATH = os.path.join(BASE_DIR, "model.pkl")
++with open(MODEL_SAVE_PATH, "wb") as f:
+     pickle.dump((model, scaler), f)
+ 
+-print("\nRandom Forest model trained ✅")
+\ No newline at end of file
++print(f"\nRandom Forest model trained and saved to {MODEL_SAVE_PATH} ✅")
+Index: gig_worker_insurance/lib/services/api_service.dart
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import 'dart:convert';\nimport 'package:http/http.dart' as http;\nimport 'package:flutter/foundation.dart';\n\nclass ApiService {\n  static String _baseUrl = \"http://10.210.9.203:8000\"; // Updated to current IP\n\n  /// Allows the SDK to set the backend URL dynamically during initialization.\n  static void setBaseUrl(String url) {\n    _baseUrl = url;\n  }\n\n  static Future<Map<String, dynamic>> predictRisk() async {\n    try {\n      final response = await http.post(\n        Uri.parse(\"$_baseUrl/predict-risk\"),\n        headers: {\"Content-Type\": \"application/json\"},\n      ).timeout(const Duration(seconds: 5));\n\n      if (response.statusCode == 200) {\n        return jsonDecode(response.body);\n      } else {\n        throw Exception(\"Server error: ${response.statusCode}\");\n      }\n    } catch (e) {\n      debugPrint(\"ApiService Error: $e\");\n      // Safety Fallback so dashboard doesn't crash\n      return {\n        \"risk_score\": 0.05,\n        \"premium\": 50,\n        \"coverage\": 1000,\n        \"trigger\": null,\n        \"fraud\": false,\n        \"payout\": 0,\n        \"details\": {\n          \"weather\": {\"current\": {\"temp\": 25.0, \"rain\": 0.0}},\n          \"traffic\": {\"current\": 0.3},\n          \"rto\": {\"today\": 0, \"mode\": 0}\n        }\n      };\n    }\n  }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gig_worker_insurance/lib/services/api_service.dart b/gig_worker_insurance/lib/services/api_service.dart
+--- a/gig_worker_insurance/lib/services/api_service.dart	(revision 017fced2477b092bcedb6210f13209c560aac768)
++++ b/gig_worker_insurance/lib/services/api_service.dart	(date 1776344191632)
+@@ -3,11 +3,13 @@
+ import 'package:flutter/foundation.dart';
+ 
+ class ApiService {
+-  static String _baseUrl = "http://10.210.9.203:8000"; // Updated to current IP
++  // Synchronized with current Mac IP: 10.100.3.40
++  static String _baseUrl = "http://10.100.3.40:8000"; 
+ 
+   /// Allows the SDK to set the backend URL dynamically during initialization.
+   static void setBaseUrl(String url) {
+     _baseUrl = url;
++    debugPrint("ApiService: Base URL updated to $_baseUrl");
+   }
+ 
+   static Future<Map<String, dynamic>> predictRisk() async {
+@@ -18,12 +20,14 @@
+       ).timeout(const Duration(seconds: 5));
+ 
+       if (response.statusCode == 200) {
+-        return jsonDecode(response.body);
++        final data = jsonDecode(response.body);
++        debugPrint("ApiService: Data received from backend: $data");
++        return data;
+       } else {
+         throw Exception("Server error: ${response.statusCode}");
+       }
+     } catch (e) {
+-      debugPrint("ApiService Error: $e");
++      debugPrint("ApiService Error (Check if Python backend is running at $_baseUrl): $e");
+       // Safety Fallback so dashboard doesn't crash
+       return {
+         "risk_score": 0.05,
+Index: gig_worker_insurance/lib/main.dart
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import 'package:flutter/material.dart';\nimport 'package:flutter_dotenv/flutter_dotenv.dart';\nimport 'zug_sdk.dart';\n\nvoid main() async {\n  WidgetsFlutterBinding.ensureInitialized();\n\n  // Load environment variables for the host app\n  await dotenv.load(fileName: \".env\");\n\n  // 1. Initialize the ZUG SDK with credentials\n  // UPDATED IP: 10.210.9.203\n  await ZUG.initialize(\n    ZUGConfig(\n      supabaseUrl: dotenv.get('SUPABASE_URL'),\n      supabaseAnonKey: dotenv.get('SUPABASE_ANON_KEY'),\n      pythonBackendUrl: \"http://10.210.9.203:8000\",\n    ),\n  );\n\n  runApp(const HostApp());\n}\n\nclass MyApp extends StatelessWidget {\n  const MyApp({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return MaterialApp(\n      title: 'Gig Worker Insurance',\n      debugShowCheckedModeBanner: false,\n      theme: ThemeData(\n        primarySwatch: Colors.indigo,\n        scaffoldBackgroundColor: const Color(0xfff5f5f5),\n      ),\n      // The SDK can be launched from anywhere, here we start it as the home\n      home: Builder(builder: (context) {\n        return Scaffold(\n          body: Center(\n            child: ElevatedButton(\n              onPressed: () => ZUG.launch(context),\n              child: const Text(\"Launch ZUG Insurance SDK\"),\n            ),\n          ),\n        );\n      }),\n    );\n  }\n}\n\n/// Example of a Host App integrating the ZUG SDK\nclass HostApp extends StatelessWidget {\n  const HostApp({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return MaterialApp(\n      title: 'ZUG SDK Host',\n      debugShowCheckedModeBanner: false,\n      theme: ThemeData(primarySwatch: Colors.indigo),\n      home: const WelcomeScreen(),\n    );\n  }\n}\n\nclass WelcomeScreen extends StatelessWidget {\n  const WelcomeScreen({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return Scaffold(\n      body: Container(\n        width: double.infinity,\n        decoration: const BoxDecoration(\n          gradient: LinearGradient(\n            colors: [Colors.indigo, Colors.blue],\n            begin: Alignment.topCenter,\n            end: Alignment.bottomCenter,\n          ),\n        ),\n        child: Column(\n          mainAxisAlignment: MainAxisAlignment.center,\n          children: [\n            const Icon(Icons.shield_outlined, size: 100, color: Colors.white),\n            const SizedBox(height: 24),\n            const Text(\n              'ZUG Insurance Engine',\n              style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),\n            ),\n            const SizedBox(height: 12),\n            const Text(\n              'Parametric Protection for Gig Workers',\n              style: TextStyle(color: Colors.white70, fontSize: 16),\n            ),\n            const SizedBox(height: 60),\n            ElevatedButton(\n              onPressed: () => ZUG.launch(context),\n              style: ElevatedButton.styleFrom(\n                backgroundColor: Colors.white,\n                foregroundColor: Colors.indigo,\n                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),\n                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),\n              ),\n              child: const Text(\n                'ENTER ZUG MODULE',\n                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),\n              ),\n            ),\n          ],\n        ),\n      ),\n    );\n  }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gig_worker_insurance/lib/main.dart b/gig_worker_insurance/lib/main.dart
+--- a/gig_worker_insurance/lib/main.dart	(revision 017fced2477b092bcedb6210f13209c560aac768)
++++ b/gig_worker_insurance/lib/main.dart	(date 1776342700451)
+@@ -9,12 +9,12 @@
+   await dotenv.load(fileName: ".env");
+ 
+   // 1. Initialize the ZUG SDK with credentials
+-  // UPDATED IP: 10.210.9.203
++  // UPDATED IP: 10.100.3.40
+   await ZUG.initialize(
+     ZUGConfig(
+       supabaseUrl: dotenv.get('SUPABASE_URL'),
+       supabaseAnonKey: dotenv.get('SUPABASE_ANON_KEY'),
+-      pythonBackendUrl: "http://10.210.9.203:8000",
++      pythonBackendUrl: "http://10.100.3.40:8000",
+     ),
+   );
+ 
+Index: gig_worker_insurance/lib/screens/login_screen.dart
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import 'dart:convert';\nimport 'package:flutter/material.dart';\nimport 'package:crypto/crypto.dart';\nimport 'package:flutter_secure_storage/flutter_secure_storage.dart';\nimport 'package:local_auth/local_auth.dart';\nimport 'package:supabase_flutter/supabase_flutter.dart';\nimport 'package:persistent_device_id/persistent_device_id.dart';\nimport '../services/telemetry_service.dart';\nimport 'dashboard_screen.dart';\nimport 'terms_conditions_screen.dart';\n\nclass LoginScreen extends StatefulWidget {\n  const LoginScreen({super.key});\n\n  @override\n  State<LoginScreen> createState() => _LoginScreenState();\n}\n\nclass _LoginScreenState extends State<LoginScreen> {\n  int _currentStep = 1; // 1: e-Shram, 2: SMS Phone, 3: OTP\n  final _storage = const FlutterSecureStorage();\n  final _auth = LocalAuthentication();\n  final _supabase = Supabase.instance.client;\n\n  final _eshramController = TextEditingController();\n  final _phoneController = TextEditingController();\n  final _otpController = TextEditingController();\n\n  bool _isLoading = false;\n  String? _hashedId;\n\n  Future<void> _handleEShramSubmit() async {\n    if (_eshramController.text.isEmpty) return;\n\n    setState(() => _isLoading = true);\n\n    final String plainId = _eshramController.text;\n    final bytes = utf8.encode(plainId);\n    _hashedId = sha256.convert(bytes).toString();\n\n    try {\n      final existingWorker = await _supabase\n          .from('workers')\n          .select()\n          .eq('eshram_hash', _hashedId!)\n          .maybeSingle();\n\n      if (existingWorker != null) {\n        // Save worker session info\n        await _storage.write(key: 'worker_id', value: existingWorker['id'].toString());\n        await _storage.write(key: 'plain_eshram_id', value: plainId);\n\n        final lastSmsStr = await _storage.read(key: 'last_sms_date');\n        if (lastSmsStr != null) {\n          final lastSmsDate = DateTime.parse(lastSmsStr);\n          if (DateTime.now().difference(lastSmsDate).inDays < 14) {\n            final didAuthenticate = await _auth.authenticate(\n              localizedReason: 'Secure login via biometrics',\n              options: const AuthenticationOptions(biometricOnly: true),\n            );\n\n            if (didAuthenticate) {\n              TelemetryService().startTracking();\n              setState(() => _isLoading = false);\n              \n              // Check if terms are already accepted\n              bool termsAccepted = existingWorker['terms_accepted'] == true;\n              if (!termsAccepted) {\n                // Double check local storage\n                final localTerms = await _storage.read(key: 'terms_accepted');\n                termsAccepted = localTerms == 'true';\n              }\n\n              _proceed(termsAccepted: termsAccepted);\n              return;\n            }\n          }\n        }\n      }\n    } catch (e) {\n      debugPrint('Supabase select error: $e');\n    }\n\n    setState(() {\n      _isLoading = false;\n      _currentStep = 2;\n    });\n  }\n\n  Future<void> _sendOtp() async {\n    if (_phoneController.text.isEmpty) return;\n    setState(() => _isLoading = true);\n    await Future.delayed(const Duration(seconds: 2));\n    setState(() {\n      _isLoading = false;\n      _currentStep = 3;\n    });\n  }\n\n  Future<void> _verifyOtp() async {\n    if (_otpController.text == '123456') {\n      setState(() => _isLoading = true);\n\n      // 1. Permission for device ID\n      bool? allowAccess = await showDialog<bool>(\n        context: context,\n        builder: (context) => AlertDialog(\n          title: const Text('Permission Required'),\n          content: const Text('Allow this app to access your persistent device ID for secure authentication?'),\n          actions: [\n            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Deny')),\n            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),\n          ],\n        ),\n      );\n\n      if (allowAccess != true) {\n        setState(() => _isLoading = false);\n        return;\n      }\n\n      // 2. Biometric check\n      try {\n        final bool didAuthenticate = await _auth.authenticate(\n          localizedReason: 'Verify fingerprint to link your account to this device',\n          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),\n        );\n\n        if (!didAuthenticate) {\n          setState(() => _isLoading = false);\n          return;\n        }\n      } catch (e) {\n        debugPrint('Biometric error: $e');\n        setState(() => _isLoading = false);\n        return;\n      }\n\n      try {\n        String? deviceId;\n        try {\n          deviceId = await PersistentDeviceId.getDeviceId();\n        } catch (e) {\n          deviceId = 'unknown_hw_id';\n        }\n\n        final response = await _supabase.from('workers').upsert({\n          'eshram_hash': _hashedId,\n          'device_id': deviceId,\n          'last_biometric_at': DateTime.now().toIso8601String(),\n          'is_trusted': true,\n        }, onConflict: 'eshram_hash').select().single();\n\n        await _storage.write(key: 'worker_id', value: response['id'].toString());\n        await _storage.write(key: 'plain_eshram_id', value: _eshramController.text);\n        await _storage.write(key: 'phone_number', value: _phoneController.text);\n        await _storage.write(key: 'last_sms_date', value: DateTime.now().toIso8601String());\n\n        TelemetryService().startTracking();\n\n        bool termsAccepted = response['terms_accepted'] == true;\n        if (!termsAccepted) {\n          final localTerms = await _storage.read(key: 'terms_accepted');\n          termsAccepted = localTerms == 'true';\n        }\n\n        _proceed(termsAccepted: termsAccepted);\n      } catch (e) {\n        debugPrint('Sync failed: $e');\n        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));\n      } finally {\n        setState(() => _isLoading = false);\n      }\n    } else {\n      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP')));\n    }\n  }\n\n  void _proceed({required bool termsAccepted}) {\n    if (termsAccepted) {\n      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainNavigationScreen()));\n    } else {\n      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TermsConditionsScreen()));\n    }\n  }\n\n  @override\n  Widget build(BuildContext context) {\n    return Scaffold(\n      backgroundColor: const Color(0xfff5f7fa),\n      appBar: AppBar(title: Text(_currentStep == 1 ? 'e-Shram Login' : 'Verification'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),\n      body: SafeArea(\n        child: SingleChildScrollView(\n          padding: const EdgeInsets.all(24.0),\n          child: Column(\n            mainAxisAlignment: MainAxisAlignment.center,\n            children: [\n              const SizedBox(height: 40),\n              if (_currentStep == 1) _buildEShramStep(),\n              if (_currentStep == 2) _buildPhoneStep(),\n              if (_currentStep == 3) _buildOtpStep(),\n            ],\n          ),\n        ),\n      ),\n    );\n  }\n\n  Widget _buildEShramStep() {\n    return Column(\n      children: [\n        const Icon(Icons.badge_rounded, size: 80, color: Colors.indigo),\n        const SizedBox(height: 32),\n        const Text('Step 1: e-Shram Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),\n        const SizedBox(height: 24),\n        TextField(controller: _eshramController, decoration: InputDecoration(labelText: 'e-Shram ID', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number),\n        const SizedBox(height: 24),\n        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _handleEShramSubmit, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Continue')),\n      ],\n    );\n  }\n\n  Widget _buildPhoneStep() {\n    return Column(\n      children: [\n        const Icon(Icons.phone_android_rounded, size: 80, color: Colors.indigo),\n        const SizedBox(height: 32),\n        const Text('Step 2: SMS Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),\n        const SizedBox(height: 24),\n        TextField(controller: _phoneController, decoration: InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.phone),\n        const SizedBox(height: 24),\n        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _sendOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Send OTP')),\n      ],\n    );\n  }\n\n  Widget _buildOtpStep() {\n    return Column(\n      children: [\n        const Icon(Icons.lock_person_rounded, size: 80, color: Colors.indigo),\n        const SizedBox(height: 32),\n        const Text('Enter 6-digit OTP', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),\n        const SizedBox(height: 24),\n        TextField(controller: _otpController, decoration: InputDecoration(labelText: 'OTP (use 123456)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number, maxLength: 6),\n        const SizedBox(height: 24),\n        _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _verifyOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Verify & Login')),\n      ],\n    );\n  }\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gig_worker_insurance/lib/screens/login_screen.dart b/gig_worker_insurance/lib/screens/login_screen.dart
+--- a/gig_worker_insurance/lib/screens/login_screen.dart	(revision 017fced2477b092bcedb6210f13209c560aac768)
++++ b/gig_worker_insurance/lib/screens/login_screen.dart	(date 1776341087270)
+@@ -88,91 +88,117 @@
+   }
+ 
+   Future<void> _sendOtp() async {
+-    if (_phoneController.text.isEmpty) return;
++    final phone = _phoneController.text.trim();
++    if (phone.isEmpty) return;
++    
+     setState(() => _isLoading = true);
+-    await Future.delayed(const Duration(seconds: 2));
+-    setState(() {
+-      _isLoading = false;
+-      _currentStep = 3;
+-    });
++    try {
++      // Supabase Phone Auth requires the number in E.164 format (e.g., +91...)
++      await _supabase.auth.signInWithOtp(
++        phone: phone,
++      );
++      
++      setState(() {
++        _currentStep = 3;
++      });
++    } catch (e) {
++      debugPrint('Error sending OTP: $e');
++      ScaffoldMessenger.of(context).showSnackBar(
++        SnackBar(content: Text('Failed to send OTP. Ensure number is in E.164 format (+91...)')),
++      );
++    } finally {
++      setState(() => _isLoading = false);
++    }
+   }
+ 
+   Future<void> _verifyOtp() async {
+-    if (_otpController.text == '123456') {
+-      setState(() => _isLoading = true);
++    final otp = _otpController.text.trim();
++    final phone = _phoneController.text.trim();
++    if (otp.isEmpty) return;
++
++    setState(() => _isLoading = true);
++    try {
++      final response = await _supabase.auth.verifyOTP(
++        phone: phone,
++        token: otp,
++        type: OtpType.sms,
++      );
+ 
+-      // 1. Permission for device ID
+-      bool? allowAccess = await showDialog<bool>(
+-        context: context,
+-        builder: (context) => AlertDialog(
+-          title: const Text('Permission Required'),
+-          content: const Text('Allow this app to access your persistent device ID for secure authentication?'),
+-          actions: [
+-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Deny')),
+-            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
+-          ],
+-        ),
+-      );
++      if (response.session != null) {
++        // OTP Verified successfully, continue with device linking and biometrics
++        await _onOtpSuccess();
++      } else {
++        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP')));
++      }
++    } catch (e) {
++      debugPrint('OTP Verification Error: $e');
++      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification failed: $e')));
++    } finally {
++      setState(() => _isLoading = false);
++    }
++  }
++
++  Future<void> _onOtpSuccess() async {
++    // 1. Permission for device ID
++    bool? allowAccess = await showDialog<bool>(
++      context: context,
++      builder: (context) => AlertDialog(
++        title: const Text('Permission Required'),
++        content: const Text('Allow this app to access your persistent device ID for secure authentication?'),
++        actions: [
++          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Deny')),
++          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Allow')),
++        ],
++      ),
++    );
+ 
+-      if (allowAccess != true) {
+-        setState(() => _isLoading = false);
+-        return;
+-      }
++    if (allowAccess != true) return;
+ 
+-      // 2. Biometric check
+-      try {
+-        final bool didAuthenticate = await _auth.authenticate(
+-          localizedReason: 'Verify fingerprint to link your account to this device',
+-          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+-        );
++    // 2. Biometric check
++    try {
++      final bool didAuthenticate = await _auth.authenticate(
++        localizedReason: 'Verify fingerprint to link your account to this device',
++        options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
++      );
+ 
+-        if (!didAuthenticate) {
+-          setState(() => _isLoading = false);
+-          return;
+-        }
+-      } catch (e) {
+-        debugPrint('Biometric error: $e');
+-        setState(() => _isLoading = false);
+-        return;
+-      }
++      if (!didAuthenticate) return;
++    } catch (e) {
++      debugPrint('Biometric error: $e');
++      return;
++    }
+ 
+-      try {
+-        String? deviceId;
+-        try {
+-          deviceId = await PersistentDeviceId.getDeviceId();
+-        } catch (e) {
+-          deviceId = 'unknown_hw_id';
+-        }
++    try {
++      String? deviceId;
++      try {
++        deviceId = await PersistentDeviceId.getDeviceId();
++      } catch (e) {
++        deviceId = 'unknown_hw_id';
++      }
+ 
+-        final response = await _supabase.from('workers').upsert({
+-          'eshram_hash': _hashedId,
+-          'device_id': deviceId,
+-          'last_biometric_at': DateTime.now().toIso8601String(),
+-          'is_trusted': true,
+-        }, onConflict: 'eshram_hash').select().single();
++      final response = await _supabase.from('workers').upsert({
++        'eshram_hash': _hashedId,
++        'device_id': deviceId,
++        'last_biometric_at': DateTime.now().toIso8601String(),
++        'is_trusted': true,
++      }, onConflict: 'eshram_hash').select().single();
+ 
+-        await _storage.write(key: 'worker_id', value: response['id'].toString());
+-        await _storage.write(key: 'plain_eshram_id', value: _eshramController.text);
+-        await _storage.write(key: 'phone_number', value: _phoneController.text);
+-        await _storage.write(key: 'last_sms_date', value: DateTime.now().toIso8601String());
++      await _storage.write(key: 'worker_id', value: response['id'].toString());
++      await _storage.write(key: 'plain_eshram_id', value: _eshramController.text);
++      await _storage.write(key: 'phone_number', value: _phoneController.text);
++      await _storage.write(key: 'last_sms_date', value: DateTime.now().toIso8601String());
+ 
+-        TelemetryService().startTracking();
++      TelemetryService().startTracking();
+ 
+-        bool termsAccepted = response['terms_accepted'] == true;
+-        if (!termsAccepted) {
+-          final localTerms = await _storage.read(key: 'terms_accepted');
+-          termsAccepted = localTerms == 'true';
+-        }
++      bool termsAccepted = response['terms_accepted'] == true;
++      if (!termsAccepted) {
++        final localTerms = await _storage.read(key: 'terms_accepted');
++        termsAccepted = localTerms == 'true';
++      }
+ 
+-        _proceed(termsAccepted: termsAccepted);
+-      } catch (e) {
+-        debugPrint('Sync failed: $e');
+-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+-      } finally {
+-        setState(() => _isLoading = false);
+-      }
+-    } else {
+-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP')));
++      _proceed(termsAccepted: termsAccepted);
++    } catch (e) {
++      debugPrint('Sync failed: $e');
++      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync error: $e')));
+     }
+   }
+ 
+@@ -227,7 +253,15 @@
+         const SizedBox(height: 32),
+         const Text('Step 2: SMS Verification', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+         const SizedBox(height: 24),
+-        TextField(controller: _phoneController, decoration: InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.phone),
++        TextField(
++          controller: _phoneController, 
++          decoration: InputDecoration(
++            labelText: 'Phone Number (e.g. +91...)', 
++            hintText: '+919876543210',
++            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))
++          ), 
++          keyboardType: TextInputType.phone
++        ),
+         const SizedBox(height: 24),
+         _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _sendOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Send OTP')),
+       ],
+@@ -241,7 +275,7 @@
+         const SizedBox(height: 32),
+         const Text('Enter 6-digit OTP', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+         const SizedBox(height: 24),
+-        TextField(controller: _otpController, decoration: InputDecoration(labelText: 'OTP (use 123456)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number, maxLength: 6),
++        TextField(controller: _otpController, decoration: InputDecoration(labelText: 'OTP', border: OutlineInputBorder(borderRadius: BorderRadius.circular(16))), keyboardType: TextInputType.number, maxLength: 6),
+         const SizedBox(height: 24),
+         _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _verifyOtp, style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text('Verify & Login')),
+       ],
+Index: gig_worker_insurance/backend/ml/predict.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import os\nimport pickle\nimport pandas as pd\n\n\nBASE_DIR = os.path.dirname(os.path.abspath(__file__))\nMODEL_PATH = os.path.join(BASE_DIR, \"model.pkl\")\n\nwith open(MODEL_PATH, \"rb\") as f:\n    model,scaler= pickle.load(f)\n\ndef predict_risk_ml(rain, temp, traffic, rto):\n    print(\"ML INPUT:\", {\n    \"rain\": rain,\n    \"temp\": temp,\n    \"traffic\": traffic,\n    \"rto\": rto\n})\n    try:\n        FEATURES = [\"rain\", \"temp\", \"traffic\", \"rto\"]\n        features = pd.DataFrame([[rain, temp, traffic, rto]], columns=FEATURES)        \n        return float(model.predict(features)[0])\n    except Exception as e:\n            print(\"ML prediction failed:\", e)\n            return 0
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gig_worker_insurance/backend/ml/predict.py b/gig_worker_insurance/backend/ml/predict.py
+--- a/gig_worker_insurance/backend/ml/predict.py	(revision 017fced2477b092bcedb6210f13209c560aac768)
++++ b/gig_worker_insurance/backend/ml/predict.py	(date 1776343309560)
+@@ -1,25 +1,40 @@
+ import os
+ import pickle
+ import pandas as pd
+-
++import numpy as np
+ 
+ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+ 
++# Load model and scaler
+ with open(MODEL_PATH, "rb") as f:
+-    model,scaler= pickle.load(f)
++    data = pickle.load(f)
++    if isinstance(data, tuple):
++        model, scaler = data
++    else:
++        # Fallback if only model was saved
++        model = data
++        scaler = None
+ 
+ def predict_risk_ml(rain, temp, traffic, rto):
+     print("ML INPUT:", {
+-    "rain": rain,
+-    "temp": temp,
+-    "traffic": traffic,
+-    "rto": rto
+-})
++        "rain": rain,
++        "temp": temp,
++        "traffic": traffic,
++        "rto": rto
++    })
+     try:
+         FEATURES = ["rain", "temp", "traffic", "rto"]
+-        features = pd.DataFrame([[rain, temp, traffic, rto]], columns=FEATURES)        
+-        return float(model.predict(features)[0])
++        features = pd.DataFrame([[rain, temp, traffic, rto]], columns=FEATURES)
++
++        # Scale features if scaler exists
++        if scaler is not None:
++            features_scaled = scaler.transform(features)
++        else:
++            features_scaled = features
++
++        prediction = model.predict(features_scaled)[0]
++        return float(prediction)
+     except Exception as e:
+-            print("ML prediction failed:", e)
+-            return 0
+\ No newline at end of file
++        print("ML prediction failed:", e)
++        return 0.05 # Default safety fallback
+Index: gig_worker_insurance/lib/screens/dashboard_screen.dart
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import 'package:flutter/material.dart';\nimport 'package:supabase_flutter/supabase_flutter.dart';\nimport 'package:flutter_secure_storage/flutter_secure_storage.dart';\nimport '../services/api_service.dart';\nimport '../services/valid_claim_simulator.dart';\nimport '../services/fraud_claim_simulator.dart';\nimport '../zug_sdk.dart';\nimport 'tickets_screen.dart';\nimport 'profile_screen.dart';\n\nclass DashboardScreen extends StatefulWidget {\n  const DashboardScreen({super.key});\n\n  @override\n  State<DashboardScreen> createState() => _DashboardScreenState();\n}\n\nclass _DashboardScreenState extends State<DashboardScreen> {\n  final _supabase = Supabase.instance.client;\n  final _storage = const FlutterSecureStorage();\n  \n  bool _isLoading = true;\n  bool _hasBoughtPremium = true;\n\n  // Real-time data metrics from Supabase\n  String _disturbancesCount = '0';\n  String _amountPaidCount = '₹0';\n  String _claimsCount = '0';\n  String _fraudsCount = '0';\n  List<Map<String, dynamic>> _recentActivity = [];\n\n  // Data from Python Backend\n  int _calculatedPremium = 150;\n  String? _backendTrigger;\n  Map<String, dynamic> _weather = {};\n  double _traffic = 0.0;\n  bool _fraudAlert = false;\n  int _potentialPayout = 0;\n  int _rtoToday = 0;\n  int _rtoMode = 0;\n\n  @override\n  void initState() {\n    super.initState();\n    _refreshDashboard();\n  }\n\n  Future<void> _refreshDashboard() async {\n    setState(() => _isLoading = true);\n    await Future.wait([\n      _fetchRealDashboardData(),\n      _fetchBackendAnalysis(),\n    ]);\n    setState(() => _isLoading = false);\n  }\n\n  Future<void> _fetchBackendAnalysis() async {\n    try {\n      final data = await ApiService.predictRisk();\n      if (mounted) {\n        setState(() {\n          // Robust parsing with null-safety\n          _calculatedPremium = (data['premium'] ?? 150) as int;\n          _backendTrigger = data['trigger'];\n          \n          final details = data['details'] ?? {};\n          _weather = details['weather']?['current'] ?? {};\n          \n          final trafficData = details['traffic'] ?? {};\n          _traffic = (trafficData['current'] ?? 0.0).toDouble();\n          \n          _fraudAlert = data['fraud'] ?? false;\n          _potentialPayout = (data['payout'] ?? 0).toInt();\n          \n          final rtoData = details['rto'] ?? {};\n          _rtoToday = (rtoData['today'] ?? 0).toInt();\n          _rtoMode = (rtoData['mode'] ?? 0).toInt();\n        });\n      }\n    } catch (e) {\n      debugPrint('Backend Analysis Error: $e');\n    }\n  }\n\n  Future<void> _fetchRealDashboardData() async {\n    try {\n      final workerIdStr = await _storage.read(key: 'worker_id');\n      if (workerIdStr == null) return;\n      final int workerId = int.parse(workerIdStr);\n\n      final claimsResponse = await _supabase.from('claims').select('id').eq('worker_id', workerId);\n      _claimsCount = claimsResponse.length.toString();\n      _disturbancesCount = _claimsCount;\n\n      final payoutsResponse = await _supabase.from('payouts').select('amount').eq('worker_id', workerId).eq('status', 'paid');\n      double totalPaid = 0;\n      for (var p in payoutsResponse) {\n        totalPaid += (p['amount'] as num).toDouble();\n      }\n      _amountPaidCount = '₹${totalPaid.toStringAsFixed(0)}';\n\n      final fraudsResponse = await _supabase.from('fraud_logs').select('id').eq('worker_id', workerId).eq('status', 'pending');\n      _fraudsCount = fraudsResponse.length.toString();\n\n      final activityResponse = await _supabase.from('claims').select().eq('worker_id', workerId).order('created_at', ascending: false).limit(3);\n      _recentActivity = List<Map<String, dynamic>>.from(activityResponse);\n    } catch (e) {\n      debugPrint('Supabase fetch error: $e');\n    }\n  }\n\n  @override\n  Widget build(BuildContext context) {\n    if (_isLoading) {\n      return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.indigo)));\n    }\n\n    final List<Map<String, dynamic>> metrics = [\n      {'label': 'Disturbances this week', 'value': _disturbancesCount, 'icon': Icons.warning_amber_rounded},\n      {'label': 'Amount paid this week', 'value': _amountPaidCount, 'icon': Icons.attach_money},\n      {'label': 'Claims this week', 'value': _claimsCount, 'icon': Icons.assignment_turned_in_rounded},\n      {'label': 'Frauds detected this week', 'value': _fraudsCount, 'icon': Icons.gpp_bad_rounded},\n    ];\n\n    return Scaffold(\n      backgroundColor: const Color(0xfff5f7fa),\n      body: RefreshIndicator(\n        onRefresh: _refreshDashboard,\n        child: CustomScrollView(\n          physics: const AlwaysScrollableScrollPhysics(),\n          slivers: [\n            _buildSliverAppBar(),\n            SliverToBoxAdapter(\n              child: Padding(\n                padding: const EdgeInsets.all(16.0),\n                child: Column(\n                  crossAxisAlignment: CrossAxisAlignment.start,\n                  children: [\n                    _buildLiveStatusCard(),\n                    const SizedBox(height: 12),\n                    if (_fraudAlert) _buildFraudWarningCard(),\n                    if (_fraudAlert) const SizedBox(height: 12),\n                    _buildPremiumCard(),\n                    const SizedBox(height: 12),\n                    _buildSimulationRow(),\n                    const SizedBox(height: 12),\n                    _buildMetricsGrid(metrics),\n                    const SizedBox(height: 24),\n                    Text('Recent Activity', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),\n                    const SizedBox(height: 12),\n                    ..._recentActivity.map((activity) => _buildActivityTile(activity)).toList(),\n                    if (_recentActivity.isEmpty)\n                      const Card(child: ListTile(title: Text('No recent activity found', style: TextStyle(color: Colors.grey)))),\n                    const SizedBox(height: 40),\n                  ],\n                ),\n              ),\n            ),\n          ],\n        ),\n      ),\n    );\n  }\n\n  Widget _buildLiveStatusCard() {\n    bool hasAlert = _backendTrigger != null;\n    return Card(\n      elevation: 4,\n      color: hasAlert ? Colors.orange.shade50 : Colors.white,\n      shape: RoundedRectangleBorder(\n        borderRadius: BorderRadius.circular(16),\n        side: hasAlert ? BorderSide(color: Colors.orange.shade300, width: 2) : BorderSide.none,\n      ),\n      child: ListTile(\n        leading: Icon(\n          hasAlert ? Icons.warning_amber_rounded : Icons.cloud_done_rounded,\n          color: hasAlert ? Colors.orange : Colors.green,\n          size: 32,\n        ),\n        title: Text(\n          hasAlert ? 'Alert: $_backendTrigger Detected' : 'Environment: Normal',\n          style: TextStyle(fontWeight: FontWeight.bold, color: hasAlert ? Colors.orange.shade900 : Colors.green.shade900),\n        ),\n        subtitle: Text('Temp: ${_weather['temp'] ?? '--'}°C | Rain: ${_weather['rain'] ?? '0'}mm | Traffic: ${(_traffic * 10).toStringAsFixed(1)}/10'),\n        trailing: Column(\n          mainAxisAlignment: MainAxisAlignment.center,\n          children: [\n            const Text('PAYOUT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),\n            Text('₹$_potentialPayout', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.indigo, fontSize: 18)),\n          ],\n        ),\n      ),\n    );\n  }\n\n  Widget _buildFraudWarningCard() {\n    return Container(\n      padding: const EdgeInsets.all(16),\n      decoration: BoxDecoration(\n        color: Colors.red.shade50,\n        borderRadius: BorderRadius.circular(16),\n        border: Border.all(color: Colors.red.shade200),\n      ),\n      child: Row(\n        children: [\n          const Icon(Icons.gpp_maybe_rounded, color: Colors.red),\n          const SizedBox(width: 12),\n          const Expanded(\n            child: Text(\n              'High Fraud Probability Detected in your RTO patterns. Claims may be flagged for manual review.',\n              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),\n            ),\n          ),\n        ],\n      ),\n    );\n  }\n\n  Widget _buildSimulationRow() {\n    return Row(\n      children: [\n        Expanded(\n          child: ElevatedButton.icon(\n            onPressed: () async {\n              await ValidClaimSimulator.run();\n              _refreshDashboard();\n            },\n            icon: const Icon(Icons.check_circle_outline, size: 18),\n            label: const Text('Valid Claim'),\n            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),\n          ),\n        ),\n        const SizedBox(width: 8),\n        Expanded(\n          child: ElevatedButton.icon(\n            onPressed: () async {\n              await FraudClaimSimulator.run();\n              _refreshDashboard();\n            },\n            icon: const Icon(Icons.error_outline, size: 18),\n            label: const Text('Fraud Claim'),\n            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),\n          ),\n        ),\n      ],\n    );\n  }\n\n  Widget _buildSliverAppBar() {\n    return SliverAppBar(\n      expandedHeight: 180,\n      pinned: true,\n      automaticallyImplyLeading: false,\n      backgroundColor: Colors.indigo,\n      flexibleSpace: FlexibleSpaceBar(\n        background: Container(\n          decoration: const BoxDecoration(\n            gradient: LinearGradient(\n              colors: [Colors.indigo, Color(0xFF3F51B5)],\n              begin: Alignment.topLeft,\n              end: Alignment.bottomRight,\n            ),\n          ),\n          child: Padding(\n            padding: const EdgeInsets.only(left: 24, right: 24, top: 60),\n            child: Row(\n              mainAxisAlignment: MainAxisAlignment.spaceBetween,\n              crossAxisAlignment: CrossAxisAlignment.start,\n              children: [\n                Column(\n                  crossAxisAlignment: CrossAxisAlignment.start,\n                  children: [\n                    ValueListenableBuilder<String>(\n                      valueListenable: ZUG.userName,\n                      builder: (context, name, _) {\n                        return Text('Hello, $name', \n                          style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold));\n                      }\n                    ),\n                    const SizedBox(height: 4),\n                    Text(_hasBoughtPremium ? 'Premium Active for this week' : 'No active premium',\n                      style: const TextStyle(color: Colors.white70, fontSize: 14)),\n                  ],\n                ),\n                const CircleAvatar(radius: 28, backgroundColor: Colors.white24, child: Icon(Icons.person, size: 35, color: Colors.white)),\n              ],\n            ),\n          ),\n        ),\n      ),\n    );\n  }\n\n  Widget _buildPremiumCard() {\n    return Card(\n      elevation: 2,\n      margin: EdgeInsets.zero,\n      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),\n      child: Padding(\n        padding: const EdgeInsets.all(20),\n        child: Row(\n          children: [\n            const Icon(Icons.stars_rounded, color: Colors.indigo, size: 32),\n            const SizedBox(width: 16),\n            Expanded(\n              child: Column(\n                crossAxisAlignment: CrossAxisAlignment.start,\n                children: [\n                  const Text('Next week premium price:', \n                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.indigo)),\n                  Text('RTO Benchmarking: $_rtoToday (vs avg $_rtoMode)', \n                    style: const TextStyle(fontSize: 11, color: Colors.grey)),\n                ],\n              ),\n            ),\n            Text('₹$_calculatedPremium', \n              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Colors.indigo)),\n          ],\n        ),\n      ),\n    );\n  }\n\n  Widget _buildMetricsGrid(List<Map<String, dynamic>> metrics) {\n    return GridView.count(\n      shrinkWrap: true,\n      padding: EdgeInsets.zero,\n      physics: const NeverScrollableScrollPhysics(),\n      crossAxisCount: 2,\n      mainAxisSpacing: 12,\n      crossAxisSpacing: 12,\n      childAspectRatio: 1.4,\n      children: metrics.map((m) => Card(\n        elevation: 2,\n        margin: EdgeInsets.zero,\n        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),\n        child: Padding(\n          padding: const EdgeInsets.all(12),\n          child: Column(\n            mainAxisAlignment: MainAxisAlignment.center,\n            crossAxisAlignment: CrossAxisAlignment.start,\n            children: [\n              Icon(m['icon'] as IconData, color: Colors.indigo, size: 24),\n              const SizedBox(height: 4),\n              Text(m['value'] as String,\n                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),\n              Text(m['label'] as String,\n                  style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),\n            ],\n          ),\n        ),\n      )).toList(),\n    );\n  }\n\n  Widget _buildActivityTile(Map<String, dynamic> data) {\n    bool isPaid = data['is_paid'] == true;\n    return Card(\n      elevation: 1,\n      margin: const EdgeInsets.only(bottom: 10),\n      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),\n      child: ListTile(\n        leading: CircleAvatar(\n          backgroundColor: isPaid ? Colors.green.shade50 : Colors.orange.shade50,\n          child: Icon(Icons.receipt_long_rounded, color: isPaid ? Colors.green : Colors.orange, size: 20),\n        ),\n        title: Text('Claim ${data['trigger_type'] ?? 'ID #' + data['id'].toString()}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),\n        subtitle: Text(data['created_at'].toString().substring(0, 10), style: const TextStyle(fontSize: 12)),\n        trailing: Container(\n          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),\n          decoration: BoxDecoration(\n            color: isPaid ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),\n            borderRadius: BorderRadius.circular(8),\n          ),\n          child: Text(isPaid ? 'PAID' : 'PENDING', \n            style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),\n        ),\n      ),\n    );\n  }\n}\n\n// Main Navigation & Persistance (Refactored for correctness)\nclass MainNavigationScreen extends StatefulWidget {\n  const MainNavigationScreen({super.key});\n  @override\n  State<MainNavigationScreen> createState() => _MainNavigationScreenState();\n}\n\nclass _MainNavigationScreenState extends State<MainNavigationScreen> {\n  int _selectedTab = 0;\n  final _tab1navigatorKey = GlobalKey<NavigatorState>();\n  final _tab2navigatorKey = GlobalKey<NavigatorState>();\n  final _tab3navigatorKey = GlobalKey<NavigatorState>();\n\n  @override\n  Widget build(BuildContext context) {\n    return PersistentBottomBarScaffold(\n      onTabChanged: (index) {\n      },\n      items: [\n        PersistentTabItem(tab: const DashboardScreen(), icon: Icons.home, title: 'Home', navigatorkey: _tab1navigatorKey),\n        PersistentTabItem(tab: const TicketsScreen(), icon: Icons.confirmation_number_rounded, title: 'Tickets', navigatorkey: _tab2navigatorKey),\n        PersistentTabItem(tab: const ProfileScreen(), icon: Icons.person, title: 'Profile', navigatorkey: _tab3navigatorKey),\n      ],\n    );\n  }\n}\n\nclass PersistentBottomBarScaffold extends StatefulWidget {\n  final List<PersistentTabItem> items;\n  final Function(int)? onTabChanged;\n  const PersistentBottomBarScaffold({super.key, required this.items, this.onTabChanged});\n  @override\n  State<PersistentBottomBarScaffold> createState() => _PersistentBottomBarScaffoldState();\n}\n\nclass _PersistentBottomBarScaffoldState extends State<PersistentBottomBarScaffold> {\n  int _selectedTab = 0;\n  @override\n  Widget build(BuildContext context) {\n    return PopScope(\n      canPop: false,\n      onPopInvokedWithResult: (val, result) async {\n        if (widget.items[_selectedTab].navigatorkey?.currentState?.canPop() ?? false) {\n          widget.items[_selectedTab].navigatorkey?.currentState?.pop();\n        }\n      },\n      child: Scaffold(\n        body: IndexedStack(\n          index: _selectedTab,\n          children: widget.items.map((page) => Navigator(\n            key: page.navigatorkey,\n            onGenerateInitialRoutes: (navigator, initialRoute) => [MaterialPageRoute(builder: (context) => page.tab)],\n          )).toList(),\n        ),\n        bottomNavigationBar: BottomNavigationBar(\n          currentIndex: _selectedTab,\n          selectedItemColor: Colors.indigo,\n          onTap: (index) {\n            setState(() => _selectedTab = index);\n            widget.onTabChanged?.call(index);\n          },\n          items: widget.items.map((item) => BottomNavigationBarItem(icon: Icon(item.icon), label: item.title)).toList(),\n        ),\n      ),\n    );\n  }\n}\n\nclass PersistentTabItem {\n  final Widget tab;\n  final GlobalKey<NavigatorState>? navigatorkey;\n  final String title;\n  final IconData icon;\n  PersistentTabItem({required this.tab, this.navigatorkey, required this.title, required this.icon});\n}\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gig_worker_insurance/lib/screens/dashboard_screen.dart b/gig_worker_insurance/lib/screens/dashboard_screen.dart
+--- a/gig_worker_insurance/lib/screens/dashboard_screen.dart	(revision 017fced2477b092bcedb6210f13209c560aac768)
++++ b/gig_worker_insurance/lib/screens/dashboard_screen.dart	(date 1776344134904)
+@@ -59,8 +59,8 @@
+       final data = await ApiService.predictRisk();
+       if (mounted) {
+         setState(() {
+-          // Robust parsing with null-safety
+-          _calculatedPremium = (data['premium'] ?? 150) as int;
++          // Robust parsing with null-safety and type safety
++          _calculatedPremium = (data['premium'] ?? 150).toInt();
+           _backendTrigger = data['trigger'];
+           
+           final details = data['details'] ?? {};
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project version=\"4\">\n  <component name=\"AutoImportSettings\">\n    <option name=\"autoReloadType\" value=\"NONE\" />\n  </component>\n  <component name=\"ChangeListManager\">\n    <list default=\"true\" id=\"7a88caf4-9d6a-4d83-9529-e991aae8b2ff\" name=\"Changes\" comment=\"\">\n      <change afterPath=\"$PROJECT_DIR$/.idea/caches/deviceStreaming.xml\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/.idea/libraries/Dart_SDK.xml\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/.idea/studiobot.xml\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/gig_worker_insurance/lib/screens/terms_conditions_screen.dart\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/.idea/misc.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/misc.xml\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/.idea/workspace.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/workspace.xml\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/gig_worker_insurance/lib/main.dart\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/gig_worker_insurance/lib/main.dart\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart\" afterDir=\"false\" />\n      <change beforePath=\"$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart\" afterDir=\"false\" />\n    </list>\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\n  </component>\n  <component name=\"ClangdSettings\">\n    <option name=\"formatViaClangd\" value=\"false\" />\n  </component>\n  <component name=\"Git.Settings\">\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\n  </component>\n  <component name=\"GitHubPullRequestSearchHistory\">{\n  &quot;lastFilter&quot;: {\n    &quot;state&quot;: &quot;OPEN&quot;,\n    &quot;assignee&quot;: &quot;Jahnavi-verma&quot;\n  }\n}</component>\n  <component name=\"GithubPullRequestsUISettings\">{\n  &quot;selectedUrlAndAccountId&quot;: {\n    &quot;url&quot;: &quot;https://github.com/Jahnavi-verma/ZUG.git&quot;,\n    &quot;accountId&quot;: &quot;39505229-590b-4935-9a89-f2e8703e555d&quot;\n  }\n}</component>\n  <component name=\"ProjectColorInfo\">{\n  &quot;associatedIndex&quot;: 8\n}</component>\n  <component name=\"ProjectId\" id=\"3CJ3qNZXf6oDShxi8AAPMiyGSPa\" />\n  <component name=\"ProjectViewState\">\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\n    <option name=\"showLibraryContents\" value=\"true\" />\n  </component>\n  <component name=\"PropertiesComponent\">{\n  &quot;keyToString&quot;: {\n    &quot;Flutter.main.dart.executor&quot;: &quot;Run&quot;,\n    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,\n    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,\n    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,\n    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,\n    &quot;com.google.services.firebase.aqiPopupShown&quot;: &quot;true&quot;,\n    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,\n    &quot;git-widget-placeholder&quot;: &quot;main&quot;,\n    &quot;io.flutter.project.isFirstOpen&quot;: &quot;true&quot;,\n    &quot;io.flutter.reload.alreadyRun&quot;: &quot;true&quot;,\n    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,\n    &quot;settings.editor.selected.configurable&quot;: &quot;com.android.studio.ml.bot.mainConfigurable&quot;,\n    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;\n  }\n}</component>\n  <component name=\"RecentsManager\">\n    <key name=\"MoveFile.RECENT_KEYS\">\n      <recent name=\"$PROJECT_DIR$/gig_worker_insurance\" />\n    </key>\n  </component>\n  <component name=\"RunManager\">\n    <configuration name=\"main.dart\" type=\"FlutterRunConfigurationType\" factoryName=\"Flutter\">\n      <option name=\"filePath\" value=\"$PROJECT_DIR$/gig_worker_insurance/lib/main.dart\" />\n      <method v=\"2\" />\n    </configuration>\n  </component>\n  <component name=\"TaskManager\">\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\n      <changelist id=\"7a88caf4-9d6a-4d83-9529-e991aae8b2ff\" name=\"Changes\" comment=\"\" />\n      <created>1776090035354</created>\n      <option name=\"number\" value=\"Default\" />\n      <option name=\"presentableId\" value=\"Default\" />\n      <updated>1776090035354</updated>\n    </task>\n    <servers />\n  </component>\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision 017fced2477b092bcedb6210f13209c560aac768)
++++ b/.idea/workspace.xml	(date 1776346608749)
+@@ -4,21 +4,15 @@
+     <option name="autoReloadType" value="NONE" />
+   </component>
+   <component name="ChangeListManager">
+-    <list default="true" id="7a88caf4-9d6a-4d83-9529-e991aae8b2ff" name="Changes" comment="">
+-      <change afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/.idea/libraries/Dart_Packages.xml" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/.idea/libraries/Dart_SDK.xml" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/.idea/studiobot.xml" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/terms_conditions_screen.dart" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
++    <list default="true" id="7a88caf4-9d6a-4d83-9529-e991aae8b2ff" name="Changes" comment="the T and C">
+       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/model.pkl" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/predict.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/predict.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/train_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/backend/ml/train_model.py" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/main.dart" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/dashboard_screen.dart" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/login_screen.dart" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/screens/profile_screen.dart" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/services/api_service.dart" afterDir="false" />
+-      <change beforePath="$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart" beforeDir="false" afterPath="$PROJECT_DIR$/gig_worker_insurance/lib/zug_sdk.dart" afterDir="false" />
+     </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+@@ -29,6 +23,12 @@
+     <option name="formatViaClangd" value="false" />
+   </component>
+   <component name="Git.Settings">
++    <option name="PUSH_TAGS">
++      <GitPushTagMode>
++        <option name="argument" value="--tags" />
++        <option name="title" value="All" />
++      </GitPushTagMode>
++    </option>
+     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+   </component>
+   <component name="GitHubPullRequestSearchHistory">{
+@@ -92,6 +92,30 @@
+       <option name="presentableId" value="Default" />
+       <updated>1776090035354</updated>
+     </task>
++    <task id="LOCAL-00001" summary="the T and C">
++      <option name="closed" value="true" />
++      <created>1776336894456</created>
++      <option name="number" value="00001" />
++      <option name="presentableId" value="LOCAL-00001" />
++      <option name="project" value="LOCAL" />
++      <updated>1776336894456</updated>
++    </task>
++    <option name="localTasksCounter" value="2" />
+     <servers />
+   </component>
++  <component name="Vcs.Log.Tabs.Properties">
++    <option name="TAB_STATES">
++      <map>
++        <entry key="MAIN">
++          <value>
++            <State />
++          </value>
++        </entry>
++      </map>
++    </option>
++  </component>
++  <component name="VcsManagerConfiguration">
++    <MESSAGE value="the T and C" />
++    <option name="LAST_COMMIT_MESSAGE" value="the T and C" />
++  </component>
+ </project>
+\ No newline at end of file
